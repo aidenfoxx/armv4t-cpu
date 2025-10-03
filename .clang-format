@@ -1,0 +1,12 @@
+---
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+ColumnLimit: 100
+
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortFunctionsOnASingleLine: None
+AllowShortLoopsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
+
+ReflowComments: false
