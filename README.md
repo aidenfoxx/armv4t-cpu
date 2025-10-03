@@ -21,10 +21,9 @@ The core requires the consumer to provide an MMU implementation via `armv4t/mmu.
 
 ### System Control (CP15)
 
-- [-] Partial support
-  - [ ] Control register (MMU enable, caches, endianness, alignment faults)
-  - [ ] Translation table base
-  - [ ] Domain access control
-  - [x] Fault status/address (c5, c6)
-  - [ ] Cache/TLB ops
-  - [ ] Identification registers
+- [ ] Control register (MMU enable, caches, endianness, alignment faults)
+- [ ] Translation table base
+- [ ] Domain access control
+- [x] Fault status/address (c5, c6)
+- [ ] Cache/TLB ops
+- [ ] Identification registers
