@@ -1,10 +1,13 @@
 #include "cpu.h"
+#include "armv4t/cpu.h"
 
-#include <string.h>
-#include <stdbool.h>
+#include <stdlib.h>
+
+// Shorthand to prevent "has_cond" getting too messy
+#define get_flag armv4t_get_flag
 
 enum {
-    COND_EQ,
+    COND_EQ = 0,
     COND_NE,
     COND_CS,
     COND_CC,
@@ -21,46 +24,59 @@ enum {
     COND_AL
 };
 
-void cpu_init(cpu_t *cpu, mmu_t *mmu) {
-    memset(cpu, 0, sizeof(cpu_t));
-    cpu->mmu = mmu;
-    cpu->cpsr.m = MODE_USER;
+bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
+    *cpu = calloc(1, sizeof(armv4t_cpu));
+    if (*cpu) {
+        return false;
+    }
+
+    (*cpu)->_mmu = mmu;
+    armv4t_set_mode(*cpu, MODE_USR);
+    return true;
 }
 
-void cpu_step(cpu_t *cpu) {
-    cpu->cpsr.t ? thumb_step(cpu) : arm_step(cpu);
+void armv4t_cpu_destroy(armv4t_cpu *cpu) {
+    free(cpu);
 }
 
-bool has_cond(cpu_t *cpu, int cond) {
+void armv4t_step(armv4t_cpu *cpu) {
+    if (get_flag(cpu, FLAG_THUMB)) {
+        thumb_step(cpu);
+    } else {
+        arm_step(cpu);
+    }
+}
+
+bool has_cond(armv4t_cpu *cpu, int cond) {
     switch (cond) {
     case COND_EQ:
-        return cpu->cpsr.z;
+        return get_flag(cpu, FLAG_Z);
     case COND_NE:
-        return !cpu->cpsr.z;
+        return !get_flag(cpu, FLAG_Z);
     case COND_CS:
-        return cpu->cpsr.c;
+        return get_flag(cpu, FLAG_C);
     case COND_CC:
-        return !cpu->cpsr.c;
+        return !get_flag(cpu, FLAG_C);
     case COND_MI:
-        return cpu->cpsr.n;
+        return get_flag(cpu, FLAG_N);
     case COND_PL:
-        return !cpu->cpsr.n;
+        return !get_flag(cpu, FLAG_N);
     case COND_VS:
-        return cpu->cpsr.v;
+        return get_flag(cpu, FLAG_V);
     case COND_VC:
-        return !cpu->cpsr.v;
+        return !get_flag(cpu, FLAG_V);
     case COND_HI:
-        return cpu->cpsr.c && !cpu->cpsr.z;
+        return get_flag(cpu, FLAG_C) && get_flag(cpu, FLAG_Z);
     case COND_LS:
-        return !cpu->cpsr.c || cpu->cpsr.z;
+        return !get_flag(cpu, FLAG_C) || get_flag(cpu, FLAG_Z);
     case COND_GE:
-        return cpu->cpsr.n == cpu->cpsr.v;
+        return get_flag(cpu, FLAG_N) == get_flag(cpu, FLAG_V);
     case COND_LT:
-        return cpu->cpsr.n != cpu->cpsr.v;
+        return get_flag(cpu, FLAG_N) != get_flag(cpu, FLAG_V);
     case COND_GT:
-        return !cpu->cpsr.z && cpu->cpsr.n == cpu->cpsr.v;
+        return !get_flag(cpu, FLAG_Z) && get_flag(cpu, FLAG_N) == get_flag(cpu, FLAG_V);
     case COND_LE:
-        return cpu->cpsr.z || cpu->cpsr.n != cpu->cpsr.v;
+        return get_flag(cpu, FLAG_Z) || get_flag(cpu, FLAG_N) != get_flag(cpu, FLAG_V);
     case COND_AL:
         return true;
     }

@@ -3,20 +3,32 @@
 
 #include <stdint.h>
 
-typedef struct mmu mmu_t;
+#define MAKE_FSR(fault, domain) (((fault) & 0xf) | (((domain) & 0xf) << 4))
+
+#define FSR_FAULT(fsr) ((fsr) & 0xf)
+#define FSR_DOMAIN(fsr) (((fsr) >> 4) & 0xf)
 
 typedef enum {
-    MMU_OK,
-    MMU_EACCESS,
-    MMU_EALIGN,
-} mmu_status_t;
+    FAULT_ALIGN_0 = 0x01,
+    FAULT_ALIGN_1 = 0x03,
+    FAULT_TRANS_S = 0x05,
+    FAULT_TRANS_P = 0x07,
+    FAULT_DOMAIN_S = 0x09,
+    FAULT_DOMAIN_P = 0x0b,
+    FAULT_PERM_S = 0x0d,
+    FAULT_PERM_P = 0x0f,
+} armv4t_fault;
 
-static inline mmu_status_t ld_8(mmu_t *mmu, uint32_t addr, uint8_t *dest);
-static inline mmu_status_t ld_16(mmu_t *mmu, uint32_t addr, uint16_t *dest);
-static inline mmu_status_t ld_32(mmu_t *mmu, uint32_t addr, uint32_t *dest);
+typedef uint32_t armv4t_fsr;
 
-static inline mmu_status_t st_8(mmu_t *mmu, uint32_t addr, uint8_t value);
-static inline mmu_status_t st_16(mmu_t *mmu, uint32_t addr, uint16_t value);
-static inline mmu_status_t st_32(mmu_t *mmu, uint32_t addr, uint32_t value);
+typedef struct armv4t_mmu armv4t_mmu;
+
+armv4t_fsr armv4t_ld_8(armv4t_mmu *mmu, uint32_t addr, uint8_t *dest);
+armv4t_fsr armv4t_ld_16(armv4t_mmu *mmu, uint32_t addr, uint16_t *dest);
+armv4t_fsr armv4t_ld_32(armv4t_mmu *mmu, uint32_t addr, uint32_t *dest);
+
+armv4t_fsr armv4t_st_8(armv4t_mmu *mmu, uint32_t addr, uint8_t value);
+armv4t_fsr armv4t_st_16(armv4t_mmu *mmu, uint32_t addr, uint16_t value);
+armv4t_fsr armv4t_st_32(armv4t_mmu *mmu, uint32_t addr, uint32_t value);
 
 #endif // ARMV4T_MMU_H

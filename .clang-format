@@ -10,3 +10,10 @@ AllowShortLoopsOnASingleLine: true
 AllowShortEnumsOnASingleLine: false
 
 ReflowComments: false
+AlignTrailingComments: false
+
+#NumericLiteralCase:
+#  ExponentLetter:  Lower
+#  HexDigit:        Upper
+#  Prefix:          Lower
+#  Suffix:          Leave

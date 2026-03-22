@@ -1,5 +1,7 @@
-#include "bitutils.h"
+#include "armv4t/cpu.h"
+#include "armv4t/mmu.h"
 #include "cpu.h"
+#include "utils.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -8,10 +10,10 @@
 #define BRANCH_EX_VALUE 0x012fff10
 #define BRANCH_MASK 0x0e000000
 #define BRANCH_VALUE 0x0a000000
-#define DATA_REG_MASK 0x0e000010
-#define DATA_REG_VALUE 0x00000000
-#define DATA_RSR_MASK 0x0e000090
-#define DATA_RSR_VALUE 0x00000010
+#define DATA_SHIFT_IMM_MASK 0x0e000010
+#define DATA_SHIFT_IMM_VALUE 0x00000000
+#define DATA_SHIFT_REG_MASK 0x0e000090
+#define DATA_SHIFT_REG_VALUE 0x00000010
 #define DATA_IMM_MASK 0x0e000000
 #define DATA_IMM_VALUE 0x02000000
 #define PSR_REG_MASK 0x0ffe0ff0
@@ -71,14 +73,14 @@ static uint32_t add_with_carry(uint32_t a, uint32_t b, bool carry_in, bool *carr
     int64_t signed_sum = (int64_t)(int32_t)a + (int64_t)(int32_t)b + carry_in;
     uint32_t result = unsigned_sum;
 
-    *carry_out = result != unsigned_sum;
-    *overflow = (int64_t)(int32_t)result != signed_sum;
-
+    *carry_out = unsigned_sum >> 32;
+    *overflow = signed_sum != (int64_t)(int32_t)result;
     return result;
 }
 
 static uint32_t shift_c(uint32_t value, int type, int count, bool carry_in, bool *carry_out) {
-    if (!count) {
+    if (count == 0) {
+        // TODO: Check that this is correct for all cases
         *carry_out = carry_in;
         return value;
     }
@@ -99,7 +101,7 @@ static uint32_t shift_c(uint32_t value, int type, int count, bool carry_in, bool
         return ror32(value, count);
     case SHIFT_RRX:
         *carry_out = get_bit(value, 0);
-        return (carry_in << 31) | (value >> 1);
+        return ((uint32_t)carry_in << 31) | (value >> 1);
     default:
         unreachable();
     }
@@ -196,26 +198,26 @@ static uint32_t data_op(int op, uint32_t a, uint32_t b, bool carry_in, bool *car
     }
 }
 
-static void branch_ex_inst(cpu_t *cpu, uint32_t inst) {
+static void branch_ex_inst(armv4t_cpu *cpu, uint32_t inst) {
     int rn = get_bits(inst, 0, 4);
-    cpu->pc = cpu->regs[rn];
+    armv4t_bx(cpu, cpu->regs[rn]);
 }
 
-static void branch_inst(cpu_t *cpu, uint32_t inst) {
+static void branch_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool l = get_bit(inst, 24);
     int offset = get_bits(inst, 0, 24);
     bool negative = get_bit(offset, 23);
 
-    uint32_t offset_s = negative ? (offset | 0xff000000) << 2 : (uint32_t)offset << 2;
+    uint32_t offset_s = negative ? (offset | 0xff000000) * 4 : (uint32_t)offset * 4;
 
     if (l) { // BL
-        cpu->lr = cpu->pc - 4;
+        cpu->regs[REG_LR] = cpu->regs[REG_PC] + 4;
     }
 
-    cpu->pc += offset_s;
+    cpu->regs[REG_PC] = (cpu->regs[REG_PC] + offset_s) & ~0x3;
 }
 
-static void data_reg_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
+static void data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     int opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     int rn = get_bits(inst, 16, 4);
@@ -229,23 +231,27 @@ static void data_reg_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
 
     bool carry = false;
     bool overflow = false;
-    uint32_t shifted = shift_c(cpu->regs[rm], shift_t, shift_n, cpu->cpsr.c, &carry);
-    uint32_t result = data_op(opcode, cpu->regs[rn], shifted, cpu->cpsr.c, &carry, &overflow);
+    bool carry_in = armv4t_get_flag(cpu, FLAG_C);
+    uint32_t shifted = shift_c(cpu->regs[rm], shift_t, shift_n, carry_in, &carry);
+    uint32_t result = data_op(opcode, cpu->regs[rn], shifted, carry_in, &carry, &overflow);
 
     if ((opcode & OP_TST_MASK) != OP_TST_VALUE) {
-        cpu->regs[rd] = result;
-        *branch = rd == REG_PC;
+        if (rd == REG_PC) {
+            cpu->regs[REG_PC] = result & ~0x3;
+        } else {
+            cpu->regs[rd] = result;
+        }
     }
 
     if (s && rd != REG_PC) {
-        cpu->cpsr.n = get_bit(result, 31);
-        cpu->cpsr.z = !result;
-        cpu->cpsr.c = carry;
-        cpu->cpsr.v = overflow;
+        armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
+        armv4t_set_flag(cpu, FLAG_Z, result == 0);
+        armv4t_set_flag(cpu, FLAG_C, carry);
+        armv4t_set_flag(cpu, FLAG_V, overflow);
     }
 }
 
-static void data_rsr_inst(cpu_t *cpu, uint32_t inst) {
+static void data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     int opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     int rn = get_bits(inst, 16, 4);
@@ -258,23 +264,25 @@ static void data_rsr_inst(cpu_t *cpu, uint32_t inst) {
 
     bool carry = false;
     bool overflow = false;
-    uint32_t shifted = shift_c(cpu->regs[rm], shift_t, shift_n, cpu->cpsr.c, &carry);
-    uint32_t result = data_op(opcode, cpu->regs[rn], shifted, cpu->cpsr.c, &carry, &overflow);
+    bool carry_in = armv4t_get_flag(cpu, FLAG_C);
+    uint32_t shifted = shift_c(cpu->regs[rm], shift_t, shift_n, carry_in, &carry);
+    uint32_t result = data_op(opcode, cpu->regs[rn], shifted, carry_in, &carry, &overflow);
 
     if ((opcode & OP_TST_MASK) != OP_TST_VALUE) {
+        // TODO: Do we need to handle PC here?
         int rd = get_bits(inst, 12, 4);
         cpu->regs[rd] = result;
     }
 
     if (s) {
-        cpu->cpsr.n = get_bit(result, 31);
-        cpu->cpsr.z = !result;
-        cpu->cpsr.c = carry;
-        cpu->cpsr.v = overflow;
+        armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
+        armv4t_set_flag(cpu, FLAG_Z, result == 0);
+        armv4t_set_flag(cpu, FLAG_C, carry);
+        armv4t_set_flag(cpu, FLAG_V, overflow);
     }
 }
 
-static void data_imm_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
+static void data_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     int opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     int rn = get_bits(inst, 16, 4);
@@ -283,40 +291,44 @@ static void data_imm_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
 
     bool carry = false;
     bool overflow = false;
-    uint32_t imm32 = expand_imm_c(imm12, cpu->cpsr.c, &carry);
-    uint32_t result = data_op(opcode, cpu->regs[rn], imm32, cpu->cpsr.c, &carry, &overflow);
+    bool carry_in = armv4t_get_flag(cpu, FLAG_C);
+    uint32_t imm32 = expand_imm_c(imm12, carry_in, &carry);
+    uint32_t result = data_op(opcode, cpu->regs[rn], imm32, carry_in, &carry, &overflow);
 
     if ((opcode & OP_TST_MASK) != OP_TST_VALUE) {
-        cpu->regs[rd] = result;
-        *branch = rd == REG_PC;
+        if (rd == REG_PC) {
+            cpu->regs[REG_PC] = result & ~0x3;
+        } else {
+            cpu->regs[rd] = result;
+        }
     }
 
     if (s && rd != REG_PC) {
-        cpu->cpsr.n = get_bit(result, 31);
-        cpu->cpsr.z = !result;
-        cpu->cpsr.c = carry;
-        cpu->cpsr.v = overflow;
+        armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
+        armv4t_set_flag(cpu, FLAG_Z, result == 0);
+        armv4t_set_flag(cpu, FLAG_C, carry);
+        armv4t_set_flag(cpu, FLAG_V, overflow);
     }
 }
 
-static void psr_reg_inst(cpu_t *cpu, uint32_t inst) {
+static void psr_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool s = get_bit(inst, 21);
     if (s) {
         int rm = get_bits(inst, 0, 4);
-        cpu->cpsr.nzcv = get_bits(cpu->regs[rm], 27, 4);
+        set_nzcv(cpu, get_bits(cpu->regs[rm], 27, 4));
     } else {
         int rd = get_bits(inst, 12, 4);
-        cpu->regs[rd] = cpu->cpsr.value;
+        cpu->regs[rd] = cpu->cpsr;
     }
 }
 
-static void psr_imm_inst(cpu_t *cpu, uint32_t inst) {
+static void psr_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     int imm12 = get_bits(inst, 0, 12);
-    uint32_t imm32 = expand_imm(imm12, cpu->cpsr.c);
-    cpu->cpsr.nzcv = get_bits(imm32, 27, 4);
+    uint32_t imm32 = expand_imm(imm12, armv4t_get_flag(cpu, FLAG_C));
+    set_nzcv(cpu, get_bits(imm32, 27, 4));
 }
 
-static void mul_inst(cpu_t *cpu, uint32_t inst) {
+static void mul_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool a = get_bit(inst, 21);
     bool s = get_bit(inst, 20);
     int rd = get_bits(inst, 16, 4);
@@ -332,12 +344,12 @@ static void mul_inst(cpu_t *cpu, uint32_t inst) {
     cpu->regs[rd] = result;
 
     if (s) {
-        cpu->cpsr.n = get_bit(result, 31);
-        cpu->cpsr.z = !result;
+        armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
+        armv4t_set_flag(cpu, FLAG_Z, result == 0);
     }
 }
 
-static void mul_long_inst(cpu_t *cpu, uint32_t inst) {
+static void mul_long_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool a = get_bit(inst, 21);
     bool s = get_bit(inst, 20);
     int rd_hi = get_bits(inst, 16, 4);
@@ -354,12 +366,12 @@ static void mul_long_inst(cpu_t *cpu, uint32_t inst) {
     cpu->regs[rd_lo] = result;
 
     if (s) {
-        cpu->cpsr.n = get_bit(result, 31);
-        cpu->cpsr.z = !result;
+        armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
+        armv4t_set_flag(cpu, FLAG_Z, result == 0);
     }
 }
 
-static bool single_xfer_reg_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
+static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool b = get_bit(inst, 22);
@@ -374,34 +386,42 @@ static bool single_xfer_reg_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
     int shift_n;
     int shift_t = decode_imm_shift(type, imm5, &shift_n);
 
-    uint32_t offset = shift(cpu->regs[rm], shift_t, shift_n, cpu->cpsr.c);
+    bool carry_in = armv4t_get_flag(cpu, FLAG_C);
+    uint32_t offset = shift(cpu->regs[rm], shift_t, shift_n, carry_in);
     uint32_t offset_addr = cpu->regs[rn] + (u ? offset : -offset);
     uint32_t addr = p ? offset_addr : cpu->regs[rn];
 
-    mmu_fault_t fault;
+    armv4t_fsr fsr;
     if (l) {
         if (b) {
-            fault = ld_8(cpu->mmu, addr, (uint8_t *)&cpu->regs[rd]);
+            fsr = armv4t_ld_8(cpu->_mmu, addr, (uint8_t *)&cpu->regs[rd]);
         } else {
-            fault = ld_32(cpu->mmu, addr, &cpu->regs[rd]);
+            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
         }
-        *branch = rd == REG_PC;
     } else {
         if (b) {
-            fault = st_8(cpu->mmu, addr, cpu->regs[rd]);
+            fsr = armv4t_st_8(cpu->_mmu, addr, cpu->regs[rd]);
         } else {
-            fault = st_32(cpu->mmu, addr, cpu->regs[rd]);
+            fsr = armv4t_st_32(cpu->_mmu, addr, cpu->regs[rd]);
         }
+    }
+
+    if (fsr) {
+        raise_data_abort(cpu, fsr, addr);
+#ifdef ARMV4T_BASE_RESTORED
+        return;
+#endif
+    }
+    if (l && rd == REG_PC) {
+        cpu->regs[REG_PC] &= ~3u;
     }
 
     if (!p || w) {
         cpu->regs[rn] = offset_addr;
     }
-
-    return !fault;
 }
 
-static bool single_xfer_imm_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
+static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool b = get_bit(inst, 22);
@@ -414,30 +434,36 @@ static bool single_xfer_imm_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
     uint32_t offset_addr = cpu->regs[rn] + (u ? offset : -offset);
     uint32_t addr = p ? offset_addr : cpu->regs[rn];
 
-    mmu_fault_t fault;
+    armv4t_fsr fsr;
     if (l) {
         if (b) {
-            fault = ld_8(cpu->mmu, addr, (uint8_t *)&cpu->regs[rd]);
+            fsr = armv4t_ld_8(cpu->_mmu, addr, (uint8_t *)&cpu->regs[rd]);
         } else {
-            fault = ld_32(cpu->mmu, addr, &cpu->regs[rd]);
+            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
         }
-        *branch = rd == REG_PC;
     } else {
         if (b) {
-            fault = st_8(cpu->mmu, addr, cpu->regs[rd]);
+            fsr = armv4t_st_8(cpu->_mmu, addr, cpu->regs[rd]);
         } else {
-            fault = st_32(cpu->mmu, addr, cpu->regs[rd]);
+            fsr = armv4t_st_32(cpu->_mmu, addr, cpu->regs[rd]);
         }
+    }
+
+    if (fsr) {
+        raise_data_abort(cpu, fsr, addr);
+#ifdef ARMV4T_BASE_RESTORED
+        return;
+#endif
+    } else if (l && rd == REG_PC) {
+        cpu->regs[REG_PC] &= ~3u;
     }
 
     if (!p || w) {
         cpu->regs[rn] = offset_addr;
     }
-
-    return !fault;
 }
 
-static bool halfword_xfer_reg_inst(cpu_t *cpu, uint32_t inst) {
+static void halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool w = get_bit(inst, 21);
@@ -446,38 +472,43 @@ static bool halfword_xfer_reg_inst(cpu_t *cpu, uint32_t inst) {
     int rd = get_bits(inst, 12, 4);
     int rm = get_bits(inst, 0, 4);
 
-    uint32_t offset = shift(cpu->regs[rm], SHIFT_LSL, 0, cpu->cpsr.c);
+    bool carry_in = armv4t_get_flag(cpu, FLAG_C);
+    uint32_t offset = shift(cpu->regs[rm], SHIFT_LSL, 0, carry_in);
     uint32_t offset_addr = cpu->regs[rn] + (u ? offset : -offset);
     uint32_t addr = p ? offset_addr : cpu->regs[rn];
 
-    mmu_fault_t fault;
+    armv4t_fsr fsr = 0;
     if (l) { // Load
         int type = get_bits(inst, 5, 2);
         switch (type) {
-        case 1:
-            fault = ld_16(cpu->mmu, addr, (uint16_t *)&cpu->regs[rd]); // Halfword
+        case 1: // Halfword
+            fsr = armv4t_ld_16(cpu->_mmu, addr, (uint16_t *)&cpu->regs[rd]);
             break;
-        case 2:
-            fault = ld_8(cpu->mmu, addr, (uint8_t *)&cpu->regs[rd]); // Signed byte
+        case 2: // Signed byte
+            fsr = armv4t_ld_8(cpu->_mmu, addr, (uint8_t *)&cpu->regs[rd]);
             break;
-        case 3:
-            fault = ld_32(cpu->mmu, addr, &cpu->regs[rd]); // Signed halfword
+        case 3: // Signed halfword
+            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
             break;
         }
     } else { // Store
-        int rd = get_bits(inst, 12, 4);
         int data = get_bits(cpu->regs[rd], 0, 16);
-        fault = st_16(cpu->mmu, addr, data);
+        fsr = armv4t_st_16(cpu->_mmu, addr, data);
+    }
+
+    if (fsr) {
+        raise_data_abort(cpu, fsr, addr);
+#ifdef ARMV4T_BASE_RESTORED
+        return;
+#endif
     }
 
     if (!p || w) {
         cpu->regs[rn] = offset_addr;
     }
-
-    return !fault;
 }
 
-static bool halfword_xfer_imm_inst(cpu_t *cpu, uint32_t inst) {
+static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool w = get_bit(inst, 21);
@@ -489,121 +520,169 @@ static bool halfword_xfer_imm_inst(cpu_t *cpu, uint32_t inst) {
     uint32_t offset_addr = cpu->regs[rn] + (u ? offset : -offset);
     uint32_t addr = p ? offset_addr : cpu->regs[rn];
 
-    mmu_fault_t fault;
+    armv4t_fsr fsr = 0;
     if (l) { // Load
         int type = get_bits(inst, 5, 2);
         switch (type) {
-        case 1:
-            fault = ld_16(cpu->mmu, addr, (uint16_t *)&cpu->regs[rd]); // Halfword
+        case 1: // Halfword
+            fsr = armv4t_ld_16(cpu->_mmu, addr, (uint16_t *)&cpu->regs[rd]);
             break;
-        case 2:
-            fault = ld_8(cpu->mmu, addr, (uint8_t *)&cpu->regs[rd]); // Signed byte
+        case 2: // Signed byte
+            fsr = armv4t_ld_8(cpu->_mmu, addr, (uint8_t *)&cpu->regs[rd]);
             break;
-        case 3:
-            fault = ld_32(cpu->mmu, addr, &cpu->regs[rd]); // Signed halfword
+        case 3: // Signed halfword
+            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
             break;
         }
     } else { // Store
         int data = get_bits(cpu->regs[rd], 0, 16);
-        fault = st_16(cpu->mmu, addr, data);
+        fsr = armv4t_st_16(cpu->_mmu, addr, data);
+    }
+
+    if (fsr) {
+        raise_data_abort(cpu, fsr, addr);
+#ifdef ARMV4T_BASE_RESTORED
+        return;
+#endif
     }
 
     if (!p || w) {
         cpu->regs[rn] = offset_addr;
     }
-
-    return !fault;
 }
 
-static bool block_xfer_inst(cpu_t *cpu, uint32_t inst, bool *branch) {
+/**
+ * This method handles a number of quirks described at:
+ * https://problemkaputt.de/gbatek-arm-opcodes-memory-block-data-transfer-ldm-stm.htm
+ */
+static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
+    bool s = get_bit(inst, 22);
     bool w = get_bit(inst, 21);
     bool l = get_bit(inst, 20);
     int rn = get_bits(inst, 16, 4);
-    int registers = get_bits(inst, 0, 16);
+    int reglist = get_bits(inst, 0, 16);
 
-    int offset = popcount32(registers) * 4;
-    uint32_t addr = u ? cpu->regs[rn] : cpu->regs[rn] - offset;
+    int offset;
+    if (!reglist) {
+        reglist = (1 << REG_PC);
+        offset = 0x40;
+    } else {
+        offset = popcount32(reglist) * 4;
+    }
+
+    uint32_t base_addr = cpu->regs[rn];
+    uint32_t offset_addr = base_addr + (u ? offset : -offset);
+    uint32_t addr = u ? base_addr : base_addr - offset;
 
     if (p == u) {
         addr += 4;
     }
 
-    mmu_fault_t fault;
-    for (int i = 0; i < 16; i++, registers >>= 1) {
-        if (registers & 0x01) {
-            if (l) { // Load
-                if ((fault = ld_32(cpu->mmu, addr, &cpu->regs[i]))) {
-                    break;
-                }
-                *branch = i == REG_PC;
-            } else { // Store
-                if ((fault = st_32(cpu->mmu, addr, cpu->regs[i]))) {
-                    break;
-                }
+    if (l && (reglist & (1 << rn))) {
+        w = false;
+    }
+
+    if (s && (reglist & (1 << REG_PC))) {
+        // TODO: Switch mode
+    } else if (s) {
+        // TODO: Use usr regs
+    }
+
+    bool first = true;
+    for (int i = 0; i < 16; i++, reglist >>= 1) {
+        if ((reglist & 1) == 0) {
+            continue;
+        }
+
+        armv4t_fsr fsr;
+        if (l) { // Load
+            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[i]);
+            if (!fsr && i == REG_PC) {
+                cpu->regs[REG_PC] &= ~3u;
+            }
+        } else { // Store
+            uint32_t value = cpu->regs[i];
+            if (i == REG_PC) {
+                value += 4;
+            } else if (w && i == rn) {
+                value = first ? base_addr : offset_addr;
             }
 
-            addr += 4;
+            fsr = armv4t_st_32(cpu->_mmu, addr, value);
         }
+
+        if (fsr) {
+            raise_data_abort(cpu, fsr, addr);
+#ifdef ARMV4T_BASE_RESTORED
+            return;
+#else
+            break;
+#endif
+        }
+
+        first = false;
+        addr += 4;
     }
 
     if (w) {
-        cpu->regs[rn] += u ? offset : -offset;
+        cpu->regs[rn] = offset_addr;
     }
-
-    return !fault;
 }
 
-static bool swap_inst(cpu_t *cpu, uint32_t inst) {
+static void swap_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool b = get_bit(inst, 22);
     int rn = get_bits(inst, 16, 4);
     int rd = get_bits(inst, 12, 4);
     int rm = get_bits(inst, 0, 4);
 
-    int addr = cpu->regs[rn];
+    uint32_t addr = cpu->regs[rn];
 
+    armv4t_fsr fsr;
     uint32_t result;
-    mmu_fault_t fault;
     if (b) {
-        fault = ld_8(cpu->mmu, addr, (uint8_t *)&result);
+        fsr = armv4t_ld_8(cpu->_mmu, addr, (uint8_t *)&result);
+        if (!fsr) {
+            fsr = armv4t_st_8(cpu->_mmu, addr, cpu->regs[rm]);
+        }
     } else {
-        fault = ld_32(cpu->mmu, addr, &result);
+        fsr = armv4t_ld_32(cpu->_mmu, addr, &result);
+        if (!fsr) {
+            fsr = armv4t_st_32(cpu->_mmu, addr, cpu->regs[rm]);
+        }
     }
 
-    if (b) {
-        fault = st_8(cpu->mmu, addr, cpu->regs[rm]);
-    } else {
-        fault = st_32(cpu->mmu, addr, cpu->regs[rm]);
+    if (fsr) {
+        raise_data_abort(cpu, fsr, addr);
+        return;
     }
 
     cpu->regs[rd] = result;
-
-    return !fault;
 }
 
-void arm_step(cpu_t *cpu) {
+void arm_step(armv4t_cpu *cpu) {
     uint32_t inst;
-    ld_32(cpu->mmu, cpu->pc, &inst);
+    armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, cpu->regs[REG_PC], &inst);
+    if (fsr) {
+        raise_prefetch_abort(cpu, fsr, cpu->regs[REG_PC]);
+        return;
+    }
 
-    cpu->pc += 8;
+    cpu->regs[REG_PC] += 4;
 
-    bool branch = false;
     int cond = get_bits(inst, 28, 4);
-
     if (has_cond(cpu, cond)) {
         if ((inst & BRANCH_EX_MASK) == BRANCH_EX_VALUE) {
             branch_ex_inst(cpu, inst);
-            branch = true;
         } else if ((inst & BRANCH_MASK) == BRANCH_VALUE) {
             branch_inst(cpu, inst);
-            branch = true;
-        } else if ((inst & DATA_REG_MASK) == DATA_REG_VALUE) {
-            data_reg_inst(cpu, inst, &branch);
-        } else if ((inst & DATA_RSR_MASK) == DATA_RSR_VALUE) {
-            data_rsr_inst(cpu, inst);
+        } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
+            data_shift_imm_inst(cpu, inst);
+        } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
+            data_shift_reg_inst(cpu, inst);
         } else if ((inst & DATA_IMM_MASK) == DATA_IMM_VALUE) {
-            data_imm_inst(cpu, inst, &branch);
+            data_imm_inst(cpu, inst);
         } else if ((inst & PSR_REG_MASK) == PSR_REG_VALUE) {
             psr_reg_inst(cpu, inst);
         } else if ((inst & PSR_IMM_MASK) == PSR_IMM_VALUE) {
@@ -613,24 +692,19 @@ void arm_step(cpu_t *cpu) {
         } else if ((inst & MUL_LONG_MASK) == MUL_LONG_VALUE) {
             mul_long_inst(cpu, inst);
         } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
-            single_xfer_reg_inst(cpu, inst, &branch);
+            single_xfer_reg_inst(cpu, inst);
         } else if ((inst & SINGLE_XFER_IMM_MASK) == SINGLE_XFER_IMM_VALUE) {
-            single_xfer_imm_inst(cpu, inst, &branch);
+            single_xfer_imm_inst(cpu, inst);
         } else if ((inst & HALFWORD_XFER_REG_MASK) == HALFWORD_XFER_REG_VALUE) {
             halfword_xfer_reg_inst(cpu, inst);
         } else if ((inst & HALFWORD_XFER_IMM_MASK) == HALFWORD_XFER_IMM_VALUE) {
             halfword_xfer_imm_inst(cpu, inst);
         } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
-            block_xfer_inst(cpu, inst, &branch);
+            block_xfer_inst(cpu, inst);
         } else if ((inst & SWAP_MASK) == SWAP_VALUE) {
             swap_inst(cpu, inst);
-        } // else invalid instruction
-    }
-
-    if (branch) {
-        cpu->cpsr.t = cpu->pc & 0x01;
-        cpu->pc &= 0xfffffffe;
-    } else {
-        cpu->pc -= 4;
+        } else {
+            raise_undefined(cpu, inst);
+        }
     }
 }

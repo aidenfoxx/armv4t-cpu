@@ -1,19 +1,29 @@
-#ifndef BITUTILS_H
-#define BITUTILS_H
+#ifndef UTILS_H
+#define UTILS_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifndef __has_builtin
-#define __has_builtin(x) false
+#define __has_builtin(x) 0
+#endif
+
+#ifdef __GNUC__
+#define unreachable() (__builtin_unreachable())
+#elif defined(_MSC_VER)
+#define unreachable() (__assume(false))
+#else
+[[noreturn]] inline void unreachable_impl() {}
+#define unreachable() (unreachable_impl())
 #endif
 
 static inline bool get_bit(uint32_t value, int offset) {
-    return (value >> offset) & 0x01;
+    return (value >> offset) & 1;
 }
 
 static inline int get_bits(uint32_t value, int offset, int count) {
-    return (value >> offset) & ((1 << count) - 1);
+    return (value >> offset) & ((1u << count) - 1);
 }
 
 static inline uint32_t ror32(uint32_t value, int count) {
@@ -21,6 +31,8 @@ static inline uint32_t ror32(uint32_t value, int count) {
     return __builtin_rotateright32(value, count);
 #elif __has_builtin(__builtin_stdc_rotate_right)
     return __builtin_stdc_rotate_right(value, count);
+#elif defined(_MSC_VER)
+    return _rotr(value, count);
 #else
     return (value >> count) | (value << (32 - count));
 #endif
@@ -29,13 +41,15 @@ static inline uint32_t ror32(uint32_t value, int count) {
 static inline int popcount32(uint32_t value) {
 #if __has_builtin(__builtin_clz)
     return __builtin_clz(value);
+#elif defined(_MSC_VER)
+    return __popcnt(value);
 #else
     int count = 0;
-    for (; value; value >>= 1) {
-        count += value & 0x01;
+    for (; value; count++) {
+        value &= value - 1;
     }
     return count;
 #endif
 }
 
-#endif // BITUTILS_H
+#endif // UTILS_H
