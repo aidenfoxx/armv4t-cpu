@@ -16,6 +16,8 @@ void thumb_step(armv4t_cpu *cpu);
 
 bool has_cond(armv4t_cpu *cpu, int cond);
 
+void restore_spsr(armv4t_cpu *cpu);
+
 void raise_irq(armv4t_cpu *cpu);
 void raise_fiq(armv4t_cpu *cpu);
 void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa);

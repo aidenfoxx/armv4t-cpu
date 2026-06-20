@@ -14,8 +14,8 @@ typedef enum {
     MODE_IRQ,
     MODE_SVC,
     MODE_ABT = 0x17,
-    MODE_UND = 0x1b,
-    MODE_SYS = 0x1f,
+    MODE_UND = 0x1B,
+    MODE_SYS = 0x1F,
 } armv4t_mode;
 
 typedef enum {
@@ -35,15 +35,23 @@ typedef struct {
     uint32_t regs[16];
     uint32_t cp15[15];
     armv4t_psr cpsr;
+    struct {
+        armv4t_psr fiq;
+        armv4t_psr irq;
+        armv4t_psr svc;
+        armv4t_psr abt;
+        armv4t_psr und;
+    } spsr;
     /* private */
     struct armv4t_mmu *_mmu;
     struct armv4t_internal *_internal;
 } armv4t_cpu;
 
 static inline armv4t_mode armv4t_get_mode(const armv4t_cpu *cpu) {
-    return (armv4t_mode)(cpu->cpsr & 0x1f);
+    return (armv4t_mode)(cpu->cpsr & 0x1F);
 }
 
+// TODO: Should this actually pull out the correct regs and stuff??
 static inline void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
 }
@@ -59,7 +67,7 @@ static inline void armv4t_set_flag(armv4t_cpu *cpu, armv4t_flag flag, bool value
 static inline void armv4t_bx(armv4t_cpu *cpu, uint32_t addr) {
     bool thumb = addr & 1;
     armv4t_set_flag(cpu, FLAG_THUMB, thumb);
-    cpu->regs[REG_PC] = thumb ? addr & ~1u : addr & ~3u;
+    cpu->regs[REG_PC] = thumb ? addr & ~1 : addr & ~3;
 }
 
 static inline void armv4t_blx(armv4t_cpu *cpu, uint32_t addr) {

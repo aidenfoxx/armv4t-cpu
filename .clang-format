@@ -4,6 +4,8 @@ BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 100
 
+PenaltyBreakAssignment: 1000
+
 AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 AllowShortFunctionsOnASingleLine: None
 AllowShortLoopsOnASingleLine: true

@@ -26,7 +26,7 @@ enum {
 
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
     *cpu = calloc(1, sizeof(armv4t_cpu));
-    if (*cpu) {
+    if (!*cpu) {
         return false;
     }
 
@@ -66,7 +66,7 @@ bool has_cond(armv4t_cpu *cpu, int cond) {
     case COND_VC:
         return !get_flag(cpu, FLAG_V);
     case COND_HI:
-        return get_flag(cpu, FLAG_C) && get_flag(cpu, FLAG_Z);
+        return get_flag(cpu, FLAG_C) && !get_flag(cpu, FLAG_Z);
     case COND_LS:
         return !get_flag(cpu, FLAG_C) || get_flag(cpu, FLAG_Z);
     case COND_GE:
@@ -82,4 +82,26 @@ bool has_cond(armv4t_cpu *cpu, int cond) {
     }
 
     return false;
+}
+
+void restore_spsr(armv4t_cpu *cpu) {
+    switch (armv4t_get_mode(cpu)) {
+    case MODE_FIQ:
+        cpu->cpsr = cpu->spsr.fiq;
+        break;
+    case MODE_IRQ:
+        cpu->cpsr = cpu->spsr.irq;
+        break;
+    case MODE_SVC:
+        cpu->cpsr = cpu->spsr.svc;
+        break;
+    case MODE_ABT:
+        cpu->cpsr = cpu->spsr.abt;
+        break;
+    case MODE_UND:
+        cpu->cpsr = cpu->spsr.und;
+        break;
+    default:
+        break;
+    }
 }

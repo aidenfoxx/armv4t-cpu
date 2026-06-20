@@ -5,10 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef __has_builtin
-#define __has_builtin(x) 0
-#endif
-
 #ifdef __GNUC__
 #define unreachable() (__builtin_unreachable())
 #elif defined(_MSC_VER)
@@ -26,6 +22,10 @@ static inline int get_bits(uint32_t value, int offset, int count) {
     return (value >> offset) & ((1u << count) - 1);
 }
 
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
 static inline uint32_t ror32(uint32_t value, int count) {
 #if __has_builtin(__builtin_rotateright32)
     return __builtin_rotateright32(value, count);
@@ -39,8 +39,8 @@ static inline uint32_t ror32(uint32_t value, int count) {
 }
 
 static inline int popcount32(uint32_t value) {
-#if __has_builtin(__builtin_clz)
-    return __builtin_clz(value);
+#if __has_builtin(__builtin_popcount)
+    return __builtin_popcount(value);
 #elif defined(_MSC_VER)
     return __popcnt(value);
 #else
