@@ -10,7 +10,8 @@
 #elif defined(_MSC_VER)
 #define unreachable() (__assume(false))
 #else
-[[noreturn]] inline void unreachable_impl() {}
+[[noreturn]] inline void unreachable_impl() {
+}
 #define unreachable() (unreachable_impl())
 #endif
 
@@ -45,7 +46,7 @@ static inline int popcount32(uint32_t value) {
     return __popcnt(value);
 #else
     int count = 0;
-    for (; value; count++) {
+    for (; value != 0; count++) {
         value &= value - 1;
     }
     return count;

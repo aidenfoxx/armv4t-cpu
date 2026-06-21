@@ -35,13 +35,6 @@ typedef struct {
     uint32_t regs[16];
     uint32_t cp15[15];
     armv4t_psr cpsr;
-    struct {
-        armv4t_psr fiq;
-        armv4t_psr irq;
-        armv4t_psr svc;
-        armv4t_psr abt;
-        armv4t_psr und;
-    } spsr;
     /* private */
     struct armv4t_mmu *_mmu;
     struct armv4t_internal *_internal;
@@ -49,11 +42,6 @@ typedef struct {
 
 static inline armv4t_mode armv4t_get_mode(const armv4t_cpu *cpu) {
     return (armv4t_mode)(cpu->cpsr & 0x1F);
-}
-
-// TODO: Should this actually pull out the correct regs and stuff??
-static inline void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
-    cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
 }
 
 static inline bool armv4t_get_flag(const armv4t_cpu *cpu, armv4t_flag flag) {
@@ -81,6 +69,8 @@ static inline void armv4t_bxlr(armv4t_cpu *cpu) {
 
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu);
 void armv4t_cpu_destroy(armv4t_cpu *cpu);
+
+armv4t_mode armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
 void armv4t_step(armv4t_cpu *cpu);
 void armv4t_reset(armv4t_cpu *cpu);

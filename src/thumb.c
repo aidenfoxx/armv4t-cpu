@@ -1,33 +1,14 @@
 #include "cpu.h"
 
-#define SHIFT_MASK 0xe000
-#define SHIFT_VALUE 0x0000
-#define ADD_SUB_MASK 0xf800
-#define ADD_SUB_VALUE 0x1800
-#define DATA_IMM_MASK 0xe000
-#define DATA_IMM_VALUE 0x2000
-#define DATA_ALU_MASK 0xfc00
-#define DATA_ALU_VALUE 0x4000
-#define HI_REG_BRANCH_EX_MASK 0x0e000000
-#define HI_REG_BRANCH_EX_VALUE 0x02000000
-#define PC_LOAD_MASK 0x0ffe0ff0
-#define PC_LOAD_VALUE 0x01080000
-#define SINGLE_XFER_REG_MASK 0x0ffff000
-#define SINGLE_XFER_REG_VALUE 0x0328f000
-#define HW_XFER_MASK 0x0fc000f0
-#define HW_XFER_VALUE 0x00000090
-#define SINGLE_XFER_IMM_MASK 0x0f8000f0
-#define SINGLE_XFER_IMM_VALUE 0x00800090
-#define HALFWORD_XFER_REG_MASK 0x0e400f90
-#define HALFWORD_XFER_REG_VALUE 0x00000090
-#define HALFWORD_XFER_IMM_MASK 0x0e400090
-#define HALFWORD_XFER_IMM_VALUE 0x00400090
-#define BLOCK_XFER_MASK 0x0e400000
-#define BLOCK_XFER_VALUE 0x08000000
-#define SWAP_MASK 0x0fb00ff0
-#define SWAP_VALUE 0x01000090
-
 void thumb_step(armv4t_cpu *cpu) {
+    uint32_t inst;
+    armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, cpu->regs[REG_PC], &inst);
+    if (fsr != 0) {
+        raise_prefetch_abort(cpu, fsr, cpu->regs[REG_PC]);
+        return;
+    }
+
     // TODO: Implement
-    armv4t_set_flag(cpu, FLAG_THUMB, false);
+
+    raise_undefined(cpu, inst);
 }
