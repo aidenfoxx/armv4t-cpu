@@ -272,9 +272,8 @@ static void data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
     bool overflow = armv4t_get_flag(cpu, FLAG_V);
     bool carry_in = armv4t_get_flag(cpu, FLAG_C);
 
-    // https://problemkaputt.de/gbatek-arm-opcodes-data-processing-alu.htm
-    uint32_t shifted = shift_c(store_reg(cpu, rm), shift_t, shift_n, carry_in, &carry);
-    uint32_t result = data_op(opcode, store_reg(cpu, rn), shifted, carry_in, &carry, &overflow);
+    uint32_t shifted = shift_c(cpu->regs[rm], shift_t, shift_n, carry_in, &carry);
+    uint32_t result = data_op(opcode, cpu->regs[rn], shifted, carry_in, &carry, &overflow);
 
     if ((opcode & OP_TST_MASK) != OP_TST_VALUE) {
         if (rd == REG_PC) {
@@ -626,10 +625,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
     int rlist_count = popcount32(rlist);
     int offset = rlist_count * 4;
 
-    if (rlist == 0) {
-        rlist = (1 << REG_PC);
-        offset = 0x40;
-    } else if (l && (rlist & (1 << rn))) {
+    if (l && (rlist & (1 << rn))) {
         w = false;
     }
 

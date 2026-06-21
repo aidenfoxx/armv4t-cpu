@@ -8,6 +8,7 @@ The system requires the consumer to provide an MMU implementation via `armv4t/mm
 
 - [x] ARM instruction set.
 - [ ] Thumb instruction set.
+- [ ] Coprocessor instructions.
 
 ### Memory & Exceptions
 
