@@ -43,6 +43,8 @@ void raise_prefetch_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa);
 void raise_undefined(armv4t_cpu *cpu, uint32_t inst);
 void raise_swi(armv4t_cpu *cpu, uint32_t imm);
 
+uint32_t *get_banked_reg(armv4t_cpu *cpu, armv4t_mode mode, int reg);
+
 void restore_spsr(armv4t_cpu *cpu);
 
 #endif // CPU_H

@@ -26,7 +26,7 @@ enum {
     COND_AL
 };
 
-static inline uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
+static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     switch (mode) {
     case MODE_USR:
     case MODE_SYS:
@@ -46,15 +46,11 @@ static inline uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-static inline uint32_t *get_r8_r12(armv4t_cpu *cpu, armv4t_mode mode) {
+static uint32_t *get_r8_r12(armv4t_cpu *cpu, armv4t_mode mode) {
     return mode == MODE_FIQ ? cpu->_internal->r8_r12_fiq : cpu->_internal->r8_r12_other;
 }
 
 static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to) {
-    if ((to & from) == (MODE_USR & MODE_SYS)) {
-        return;
-    }
-
     uint32_t *from_sp_lr = get_sp_lr(cpu, from);
     uint32_t *to_sp_lr = get_sp_lr(cpu, to);
     memcpy(from_sp_lr, &cpu->regs[REG_SP], 2 * sizeof(uint32_t));
@@ -66,6 +62,10 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
         memcpy(from_r8_r12, &cpu->regs[8], 5 * sizeof(uint32_t));
         memcpy(&cpu->regs[8], to_r8_r12, 5 * sizeof(uint32_t));
     }
+}
+
+static void has_banks_changed(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to) {
+
 }
 
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
@@ -90,6 +90,14 @@ void armv4t_step(armv4t_cpu *cpu) {
         thumb_step(cpu);
     } else {
         arm_step(cpu);
+    }
+}
+
+void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
+    armv4t_mode current = armv4t_get_mode(cpu);
+    if (mode != current) {
+        switch_mode_banks(cpu, current, mode);
+        cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
     }
 }
 
@@ -130,14 +138,21 @@ bool has_cond(armv4t_cpu *cpu, int cond) {
     }
 }
 
-armv4t_mode armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
+uint32_t *get_banked_reg(armv4t_cpu *cpu, armv4t_mode mode, int reg) {
     armv4t_mode current = armv4t_get_mode(cpu);
     if (mode != current) {
-        switch_mode_banks(cpu, current, mode);
-        cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
+        if (reg >= 8 && reg <= 12) {
+            if (mode == MODE_FIQ || current == MODE_FIQ) {
+                uint32_t *r8_r12 = get_r8_r12(cpu, mode);
+                return &r8_r12[reg - 8];
+            }
+        } else if (reg >= 13 && reg <= 14) { // TODO: Doesn't account for USR and SYS sharing regs
+            uint32_t *sp_lr = get_sp_lr(cpu, mode);
+            return &sp_lr[reg - 13];
+        }
     }
-    
-    return current;
+
+    return &cpu->regs[reg];
 }
 
 void restore_spsr(armv4t_cpu *cpu) {
