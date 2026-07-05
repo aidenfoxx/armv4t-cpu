@@ -70,7 +70,7 @@ static inline void armv4t_bxlr(armv4t_cpu *cpu) {
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu);
 void armv4t_cpu_destroy(armv4t_cpu *cpu);
 
-armv4t_mode armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
+void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
 void armv4t_step(armv4t_cpu *cpu);
 void armv4t_reset(armv4t_cpu *cpu);

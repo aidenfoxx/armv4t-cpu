@@ -1,6 +1,5 @@
 #include "cpu.h"
 #include "armv4t/cpu.h"
-#include "utils.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -42,7 +41,8 @@ static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     case MODE_UND:
         return cpu->_internal->sp_lr.und;
     default:
-        unreachable();
+        // We treat invalid modes as a no-op
+        return &cpu->regs[REG_SP];
     }
 }
 
@@ -64,24 +64,20 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
     }
 }
 
-static void has_banks_changed(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to) {
-
-}
-
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
     *cpu = calloc(1, sizeof(armv4t_cpu));
     if (!*cpu) {
         return false;
     }
 
-    // TODO: Initialize internal
-
+    (*cpu)->cpsr &= MODE_SYS;
     (*cpu)->_mmu = mmu;
-    armv4t_set_mode(*cpu, MODE_USR);
+    (*cpu)->_internal = calloc(1, sizeof(struct armv4t_internal));
     return true;
 }
 
 void armv4t_cpu_destroy(armv4t_cpu *cpu) {
+    free(cpu->_internal);
     free(cpu);
 }
 
@@ -95,8 +91,11 @@ void armv4t_step(armv4t_cpu *cpu) {
 
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     armv4t_mode current = armv4t_get_mode(cpu);
-    if (mode != current) {
+    if (!modes_share_banks(current, mode)) {
         switch_mode_banks(cpu, current, mode);
+    }
+
+    if (mode != current) {
         cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
     }
 }
@@ -138,47 +137,53 @@ bool has_cond(armv4t_cpu *cpu, int cond) {
     }
 }
 
-uint32_t *get_banked_reg(armv4t_cpu *cpu, armv4t_mode mode, int reg) {
-    armv4t_mode current = armv4t_get_mode(cpu);
-    if (mode != current) {
-        if (reg >= 8 && reg <= 12) {
-            if (mode == MODE_FIQ || current == MODE_FIQ) {
-                uint32_t *r8_r12 = get_r8_r12(cpu, mode);
-                return &r8_r12[reg - 8];
-            }
-        } else if (reg >= 13 && reg <= 14) { // TODO: Doesn't account for USR and SYS sharing regs
-            uint32_t *sp_lr = get_sp_lr(cpu, mode);
-            return &sp_lr[reg - 13];
-        }
-    }
-
-    return &cpu->regs[reg];
-}
-
-void restore_spsr(armv4t_cpu *cpu) {
-    armv4t_psr spsr;
+armv4t_psr get_spsr(armv4t_cpu *cpu) {
     armv4t_mode mode = armv4t_get_mode(cpu);
     switch (mode) {
     case MODE_FIQ:
-        spsr = cpu->_internal->spsr.fiq;
+        return cpu->_internal->spsr.fiq;
+    case MODE_IRQ:
+        return cpu->_internal->spsr.irq;
+    case MODE_SVC:
+        return cpu->_internal->spsr.svc;
+    case MODE_ABT:
+        return cpu->_internal->spsr.abt;
+    case MODE_UND:
+        return cpu->_internal->spsr.und;
+    default:
+        // Mode doesn't have SPSR
+        return 0;
+    }
+}
+
+void set_spsr(armv4t_cpu *cpu, armv4t_psr spsr) {
+    armv4t_mode mode = armv4t_get_mode(cpu);
+    switch (mode) {
+    case MODE_FIQ:
+        cpu->_internal->spsr.fiq = spsr;
         break;
     case MODE_IRQ:
-        spsr = cpu->_internal->spsr.irq;
+        cpu->_internal->spsr.irq  = spsr;
         break;
     case MODE_SVC:
-        spsr = cpu->_internal->spsr.svc;
+        cpu->_internal->spsr.svc = spsr;
         break;
     case MODE_ABT:
-        spsr = cpu->_internal->spsr.abt;
+        cpu->_internal->spsr.abt = spsr;
         break;
     case MODE_UND:
-        spsr = cpu->_internal->spsr.und;
+        cpu->_internal->spsr.und = spsr;
         break;
     default:
-        spsr = cpu->cpsr;
-        break;
+        // Mode doesn't have SPSR
+        return;
     }
+}
 
-    switch_mode_banks(cpu, mode, spsr & 0x1F);
-    cpu->cpsr = spsr;
+void restore_spsr(armv4t_cpu *cpu) {
+    armv4t_psr spsr = get_spsr(cpu);
+    if (spsr != 0) {
+        switch_mode_banks(cpu, armv4t_get_mode(cpu), spsr & 0x1F);
+        cpu->cpsr = spsr;
+    }
 }
