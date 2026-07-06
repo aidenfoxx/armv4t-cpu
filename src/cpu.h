@@ -28,13 +28,13 @@ struct armv4t_internal {
 };
 
 static inline void branch_write_pc(armv4t_cpu *cpu, uint32_t addr) {
-    cpu->regs[REG_PC] &= armv4t_get_flag(cpu, FLAG_THUMB) ? ~1 : ~3;
+    cpu->regs[REG_PC] = addr & (armv4t_get_flag(cpu, FLAG_THUMB) ? ~1 : ~3);
 }
 
 static inline bool modes_share_banks(armv4t_mode a, armv4t_mode b) {
     bool a_usr_sys = b == MODE_USR || b == MODE_SYS;
     bool b_usr_sys = a == MODE_USR || a == MODE_SYS;
-    return a == b || (a_usr_sys && b_usr_sys); 
+    return a == b || (a_usr_sys && b_usr_sys);
 }
 
 void arm_step(armv4t_cpu *cpu);
