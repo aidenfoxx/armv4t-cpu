@@ -52,10 +52,13 @@ static inline void armv4t_set_flag(armv4t_cpu *cpu, armv4t_flag flag, bool value
     cpu->cpsr = value ? cpu->cpsr | (1u << flag) : cpu->cpsr & ~(1u << flag);
 }
 
+static inline void armv4t_branch(armv4t_cpu *cpu, uint32_t addr) {
+    cpu->regs[REG_PC] = armv4t_get_flag(cpu, FLAG_THUMB) ? addr & ~1 : addr & ~3;
+}
+
 static inline void armv4t_bx(armv4t_cpu *cpu, uint32_t addr) {
-    bool thumb = addr & 1;
-    armv4t_set_flag(cpu, FLAG_THUMB, thumb);
-    cpu->regs[REG_PC] = thumb ? addr & ~1 : addr & ~3;
+    armv4t_set_flag(cpu, FLAG_THUMB, addr & 1);
+    armv4t_branch(cpu, addr);
 }
 
 static inline void armv4t_blx(armv4t_cpu *cpu, uint32_t addr) {

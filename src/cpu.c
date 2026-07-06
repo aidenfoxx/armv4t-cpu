@@ -64,6 +64,12 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
     }
 }
 
+static bool modes_share_banks(armv4t_mode a, armv4t_mode b) {
+    bool a_usr_sys = b == MODE_USR || b == MODE_SYS;
+    bool b_usr_sys = a == MODE_USR || a == MODE_SYS;
+    return a == b || (a_usr_sys && b_usr_sys);
+}
+
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
     *cpu = calloc(1, sizeof(armv4t_cpu));
     if (!*cpu) {

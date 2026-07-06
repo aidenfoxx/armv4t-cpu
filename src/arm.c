@@ -220,7 +220,7 @@ static void branch_inst(armv4t_cpu *cpu, uint32_t inst) {
         cpu->regs[REG_LR] = cpu->regs[REG_PC] - 4;
     }
 
-    branch_write_pc(cpu, cpu->regs[REG_PC] + offset_s);
+    armv4t_branch(cpu, cpu->regs[REG_PC] + offset_s);
 }
 
 static void data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
@@ -251,7 +251,7 @@ static void data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
             restore_spsr(cpu);
         }
 
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     } else if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
@@ -289,7 +289,7 @@ static void data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
             restore_spsr(cpu);
         }
 
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     } else if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
@@ -322,7 +322,7 @@ static void data_imm_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
             restore_spsr(cpu);
         }
 
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     } else if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
@@ -471,7 +471,7 @@ static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
     }
 
     if (l && rd == REG_PC) {
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     }
 
@@ -521,7 +521,7 @@ static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
     }
 
     if (l && rd == REG_PC) {
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     }
 
@@ -728,7 +728,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
             restore_spsr(cpu);
         }
 
-        branch_write_pc(cpu, cpu->regs[REG_PC]);
+        armv4t_branch(cpu, cpu->regs[REG_PC]);
         *branch = true;
     }
 }
