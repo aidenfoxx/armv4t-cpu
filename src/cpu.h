@@ -40,7 +40,7 @@ static inline bool modes_share_banks(armv4t_mode a, armv4t_mode b) {
 void arm_step(armv4t_cpu *cpu);
 void thumb_step(armv4t_cpu *cpu);
 
-bool has_cond(armv4t_cpu *cpu, int cond);
+bool has_cond(armv4t_cpu *cpu, uint32_t cond);
 
 void raise_irq(armv4t_cpu *cpu);
 void raise_fiq(armv4t_cpu *cpu);

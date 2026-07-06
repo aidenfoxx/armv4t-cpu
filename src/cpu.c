@@ -100,7 +100,7 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-bool has_cond(armv4t_cpu *cpu, int cond) {
+bool has_cond(armv4t_cpu *cpu, uint32_t cond) {
     switch (cond) {
     case COND_EQ:
         return get_flag(cpu, FLAG_Z);

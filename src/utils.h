@@ -15,11 +15,11 @@
 #define unreachable() (unreachable_impl())
 #endif
 
-static inline bool get_bit(uint32_t value, int offset) {
+static inline bool get_bit(uint32_t value, uint32_t offset) {
     return (value >> offset) & 1;
 }
 
-static inline int get_bits(uint32_t value, int offset, int count) {
+static inline uint32_t get_bits(uint32_t value, uint32_t offset, uint32_t count) {
     return (value >> offset) & ((1u << count) - 1);
 }
 
@@ -27,7 +27,7 @@ static inline int get_bits(uint32_t value, int offset, int count) {
 #define __has_builtin(x) 0
 #endif
 
-static inline uint32_t ror32(uint32_t value, int count) {
+static inline uint32_t ror32(uint32_t value, uint32_t count) {
 #if __has_builtin(__builtin_rotateright32)
     return __builtin_rotateright32(value, count);
 #elif __has_builtin(__builtin_stdc_rotate_right)
