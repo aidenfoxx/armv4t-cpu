@@ -202,8 +202,8 @@ static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool
     }
 }
 
-static uint32_t msr_byte_mask(uint32_t mask) {
-    return ((mask & 0x1) != 0 ? 0xFF : 0) | ((mask & 0x8) != 0 ? 0xFF000000 : 0);
+static uint32_t expand_msr_mask(uint32_t mask) {
+    return (get_bit(mask, 0) ? 0xFF : 0) | (get_bit(mask, 3) ? 0xFF000000 : 0);
 }
 
 static void branch_ex_inst(armv4t_cpu *cpu, uint32_t inst) {
@@ -342,20 +342,20 @@ static void mrs_inst(armv4t_cpu *cpu, uint32_t inst) {
 
 static void msr_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 22);
-    uint32_t mask = get_bits(inst, 16, 4);
+    uint32_t field_mask = get_bits(inst, 16, 4);
     uint32_t rm = get_bits(inst, 0, 4);
 
-    uint32_t byte_mask = msr_byte_mask(mask);
+    uint32_t mask = expand_msr_mask(field_mask);
 
     if (p) {
         armv4t_psr spsr = get_spsr(cpu);
-        set_spsr(cpu, (spsr & ~byte_mask) | (cpu->regs[rm] & byte_mask));
+        set_spsr(cpu, (spsr & ~mask) | (cpu->regs[rm] & mask));
     } else {
         if (armv4t_get_mode(cpu) == MODE_USR) {
-            byte_mask &= 0xFF000000;
+            mask &= 0xFF000000;
         }
 
-        armv4t_psr result = (cpu->cpsr & ~byte_mask) | (cpu->regs[rm] & byte_mask);
+        armv4t_psr result = (cpu->cpsr & ~mask) | (cpu->regs[rm] & mask);
         armv4t_set_mode(cpu, result & 0x1F);
         cpu->cpsr = result;
     }
@@ -363,21 +363,21 @@ static void msr_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
 
 static void msr_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 22);
-    uint32_t mask = get_bits(inst, 16, 4);
+    uint32_t field_mask = get_bits(inst, 16, 4);
     uint32_t imm12 = get_bits(inst, 0, 12);
 
     uint32_t imm32 = expand_imm(imm12, armv4t_get_flag(cpu, FLAG_C));
-    uint32_t byte_mask = msr_byte_mask(mask);
+    uint32_t mask = expand_msr_mask(field_mask);
 
     if (p) {
         armv4t_psr spsr = get_spsr(cpu);
-        set_spsr(cpu, (spsr & ~byte_mask) | (imm32 & byte_mask));
+        set_spsr(cpu, (spsr & ~mask) | (imm32 & mask));
     } else {
         if (armv4t_get_mode(cpu) == MODE_USR) {
-            byte_mask &= 0xFF000000;
+            mask &= 0xFF000000;
         }
 
-        armv4t_psr result = (cpu->cpsr & ~byte_mask) | (imm32 & byte_mask);
+        armv4t_psr result = (cpu->cpsr & ~mask) | (imm32 & mask);
         armv4t_set_mode(cpu, result & 0x1F);
         cpu->cpsr = result;
     }
@@ -769,14 +769,7 @@ static void swi_inst(armv4t_cpu *cpu) {
     raise_swi(cpu);
 }
 
-void arm_step(armv4t_cpu *cpu) {
-    uint32_t inst;
-    armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, cpu->regs[REG_PC], &inst);
-    if (fsr != 0) {
-        raise_prefetch_abort(cpu);
-        return;
-    }
-
+void arm_step(armv4t_cpu *cpu, uint32_t inst) {
     cpu->regs[REG_PC] += 8;
 
     bool branch = false;

@@ -21,4 +21,4 @@ The system requires the consumer to provide an MMU implementation via `armv4t/mm
 - [x] Fault status/address registers (c5, c6).
 - [X] Big-endian mode.
 
-The system implements CP15, but many of the registers must be handled by the consumer MMU implementation. See the [example](example/) project.
+The system partially implements CP15, but many of the registers must be handled by the consumer MMU implementation. See the [example](example/) project.

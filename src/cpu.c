@@ -130,11 +130,36 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
+void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
+    cpu->_internal->irq_line = irq;
+}
+
+void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
+    cpu->_internal->fiq_line = fiq;
+}
+
 void armv4t_step(armv4t_cpu *cpu) {
+    if (cpu->_internal->fiq_line && !get_flag(cpu, FLAG_FIQ)) {
+        take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
+        return;
+    }
+
+    if (cpu->_internal->irq_line && !get_flag(cpu, FLAG_IRQ)) {
+        take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
+        return;
+    }
+
+    uint32_t inst;
+    armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, cpu->regs[REG_PC], &inst);
+    if (fsr != 0) {
+        take_exception(cpu, MODE_ABT, VEC_PABT, cpu->regs[REG_PC] + 4);
+        return;
+    }
+
     if (get_flag(cpu, FLAG_THUMB)) {
-        thumb_step(cpu);
+        thumb_step(cpu, inst);
     } else {
-        arm_step(cpu);
+        arm_step(cpu, inst);
     }
 }
 
@@ -226,27 +251,12 @@ void restore_spsr(armv4t_cpu *cpu) {
     }
 }
 
-void raise_irq(armv4t_cpu *cpu) {
-    if (!get_flag(cpu, FLAG_IRQ)) {
-        take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
-    }
-}
-
-void raise_fiq(armv4t_cpu *cpu) {
-    if (!get_flag(cpu, FLAG_FIQ)) {
-        take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
-    }
-}
-
 void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa) {
     cpu->cp15[5] = fsr;
     cpu->cp15[6] = fsa;
+    // PC is inst + 8 in ARM and inst + 4 in Thumb; LR_abt is always inst + 8
     uint32_t lr = cpu->regs[REG_PC] + (get_flag(cpu, FLAG_THUMB) ? 4 : 0);
     take_exception(cpu, MODE_ABT, VEC_DABT, lr);
-}
-
-void raise_prefetch_abort(armv4t_cpu *cpu) {
-    take_exception(cpu, MODE_ABT, VEC_PABT, cpu->regs[REG_PC] + 4);
 }
 
 void raise_undefined(armv4t_cpu *cpu) {
