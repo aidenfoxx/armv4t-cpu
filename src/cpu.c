@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include "armv4t/cpu.h"
+#include "armv4t/mmu.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -24,6 +25,30 @@ enum {
     COND_LE,
     COND_AL
 };
+
+enum {
+    VEC_UND = 0x04,
+    VEC_SWI = 0x08,
+    VEC_PABT = 0x0C,
+    VEC_DABT = 0x10,
+    VEC_IRQ = 0x18,
+    VEC_FIQ = 0x1C,
+};
+
+static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, uint32_t lr) {
+    armv4t_psr cpsr = cpu->cpsr;
+    armv4t_set_mode(cpu, mode);
+    set_spsr(cpu, cpsr);
+
+    armv4t_set_flag(cpu, FLAG_THUMB, false);
+    armv4t_set_flag(cpu, FLAG_IRQ, true);
+    if (mode == MODE_FIQ) {
+        armv4t_set_flag(cpu, FLAG_FIQ, true);
+    }
+    
+    cpu->regs[REG_LR] = lr;
+    cpu->regs[REG_PC] = vector;
+}
 
 static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     switch (mode) {
@@ -65,34 +90,33 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
 }
 
 static bool modes_share_banks(armv4t_mode a, armv4t_mode b) {
-    bool a_usr_sys = b == MODE_USR || b == MODE_SYS;
-    bool b_usr_sys = a == MODE_USR || a == MODE_SYS;
+    bool a_usr_sys = a == MODE_USR || a == MODE_SYS;
+    bool b_usr_sys = b == MODE_USR || b == MODE_SYS;
     return a == b || (a_usr_sys && b_usr_sys);
 }
 
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
     *cpu = calloc(1, sizeof(armv4t_cpu));
-    if (!*cpu) {
+    if (*cpu == NULL) {
         return false;
     }
 
-    (*cpu)->cpsr &= MODE_SYS;
+    struct armv4t_internal *internal = calloc(1, sizeof(struct armv4t_internal));
+    if (internal == NULL) {
+        free(*cpu);
+        return false;
+    }
+    
+    (*cpu)->cpsr = MODE_SYS;
     (*cpu)->_mmu = mmu;
-    (*cpu)->_internal = calloc(1, sizeof(struct armv4t_internal));
+    (*cpu)->_internal = internal;
     return true;
 }
+
 
 void armv4t_cpu_destroy(armv4t_cpu *cpu) {
     free(cpu->_internal);
     free(cpu);
-}
-
-void armv4t_step(armv4t_cpu *cpu) {
-    if (get_flag(cpu, FLAG_THUMB)) {
-        thumb_step(cpu);
-    } else {
-        arm_step(cpu);
-    }
 }
 
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
@@ -103,6 +127,14 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
 
     if (mode != current) {
         cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
+    }
+}
+
+void armv4t_step(armv4t_cpu *cpu) {
+    if (get_flag(cpu, FLAG_THUMB)) {
+        thumb_step(cpu);
+    } else {
+        arm_step(cpu);
     }
 }
 
@@ -169,7 +201,7 @@ void set_spsr(armv4t_cpu *cpu, armv4t_psr spsr) {
         cpu->_internal->spsr.fiq = spsr;
         break;
     case MODE_IRQ:
-        cpu->_internal->spsr.irq  = spsr;
+        cpu->_internal->spsr.irq = spsr;
         break;
     case MODE_SVC:
         cpu->_internal->spsr.svc = spsr;
@@ -192,4 +224,37 @@ void restore_spsr(armv4t_cpu *cpu) {
         switch_mode_banks(cpu, armv4t_get_mode(cpu), spsr & 0x1F);
         cpu->cpsr = spsr;
     }
+}
+
+void raise_irq(armv4t_cpu *cpu) {
+    if (!get_flag(cpu, FLAG_IRQ)) {
+        take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
+    }
+}
+
+void raise_fiq(armv4t_cpu *cpu) {
+    if (!get_flag(cpu, FLAG_FIQ)) {
+        take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
+    }
+}
+
+void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa) {
+    cpu->cp15[5] = fsr;
+    cpu->cp15[6] = fsa;
+    uint32_t lr = cpu->regs[REG_PC] + (get_flag(cpu, FLAG_THUMB) ? 4 : 0);
+    take_exception(cpu, MODE_ABT, VEC_DABT, lr);
+}
+
+void raise_prefetch_abort(armv4t_cpu *cpu) {
+    take_exception(cpu, MODE_ABT, VEC_PABT, cpu->regs[REG_PC] + 4);
+}
+
+void raise_undefined(armv4t_cpu *cpu) {
+    uint32_t lr = cpu->regs[REG_PC] - (get_flag(cpu, FLAG_THUMB) ? 2 : 4);
+    take_exception(cpu, MODE_UND, VEC_UND, lr);
+}
+
+void raise_swi(armv4t_cpu *cpu) {
+    uint32_t lr = cpu->regs[REG_PC] - (get_flag(cpu, FLAG_THUMB) ? 2 : 4);
+    take_exception(cpu, MODE_SVC, VEC_SWI, lr);
 }

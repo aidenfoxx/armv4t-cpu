@@ -15,10 +15,12 @@
 #define DATA_SHIFT_REG_VALUE 0x00000010
 #define DATA_IMM_MASK 0x0E000000
 #define DATA_IMM_VALUE 0x02000000
-#define PSR_REG_MASK 0x0F900FF0
-#define PSR_REG_VALUE 0x01000000
-#define PSR_IMM_MASK 0x0FB0F000
-#define PSR_IMM_VALUE 0x0320F000
+#define MRS_MASK 0x0FB00FF0
+#define MRS_VALUE 0x01000000
+#define MSR_REG_MASK 0x0FB00FF0
+#define MSR_REG_VALUE 0x01200000
+#define MSR_IMM_MASK 0x0FB0F000
+#define MSR_IMM_VALUE 0x0320F000
 #define MUL_MASK 0x0FC000F0
 #define MUL_VALUE 0x00000090
 #define MUL_LONG_MASK 0x0F8000F0
@@ -200,7 +202,7 @@ static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool
     }
 }
 
-uint32_t psr_field_mask(uint32_t mask) {
+static uint32_t msr_byte_mask(uint32_t mask) {
     return ((mask & 0x1) != 0 ? 0xFF : 0) | ((mask & 0x8) != 0 ? 0xFF000000 : 0);
 }
 
@@ -332,50 +334,50 @@ static void data_imm_inst(armv4t_cpu *cpu, uint32_t inst, bool *branch) {
     }
 }
 
-static void psr_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
+static void mrs_inst(armv4t_cpu *cpu, uint32_t inst) {
+    bool p = get_bit(inst, 22);
+    uint32_t rd = get_bits(inst, 12, 4);
+    cpu->regs[rd] = p ? get_spsr(cpu) : cpu->cpsr;
+}
+
+static void msr_reg_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 22);
     uint32_t mask = get_bits(inst, 16, 4);
+    uint32_t rm = get_bits(inst, 0, 4);
 
-    uint32_t field_mask = psr_field_mask(mask);
+    uint32_t byte_mask = msr_byte_mask(mask);
 
-    if (get_bit(inst, 21)) { // MSR
-        uint32_t rm = get_bits(inst, 0, 4);
-
-        if (p) {
-            armv4t_psr spsr = get_spsr(cpu);
-            set_spsr(cpu, (spsr & ~field_mask) | (cpu->regs[rm] & field_mask));
-        } else {
-            if (armv4t_get_mode(cpu) == MODE_USR) {
-                field_mask &= 0xFF000000;
-            }
-
-            armv4t_psr result = (cpu->cpsr & ~field_mask) | (cpu->regs[rm] & field_mask);
-            armv4t_set_mode(cpu, result & 0x1F);
-            cpu->cpsr = result;
+    if (p) {
+        armv4t_psr spsr = get_spsr(cpu);
+        set_spsr(cpu, (spsr & ~byte_mask) | (cpu->regs[rm] & byte_mask));
+    } else {
+        if (armv4t_get_mode(cpu) == MODE_USR) {
+            byte_mask &= 0xFF000000;
         }
-    } else { // MRS
-        uint32_t rd = get_bits(inst, 12, 4);
-        cpu->regs[rd] = p ? get_spsr(cpu) : cpu->cpsr;
+
+        armv4t_psr result = (cpu->cpsr & ~byte_mask) | (cpu->regs[rm] & byte_mask);
+        armv4t_set_mode(cpu, result & 0x1F);
+        cpu->cpsr = result;
     }
 }
 
-static void psr_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
+static void msr_imm_inst(armv4t_cpu *cpu, uint32_t inst) {
     bool p = get_bit(inst, 22);
     uint32_t mask = get_bits(inst, 16, 4);
     uint32_t imm12 = get_bits(inst, 0, 12);
 
     uint32_t imm32 = expand_imm(imm12, armv4t_get_flag(cpu, FLAG_C));
-    uint32_t field_mask = psr_field_mask(mask);
+    uint32_t byte_mask = msr_byte_mask(mask);
 
     if (p) {
         armv4t_psr spsr = get_spsr(cpu);
-        set_spsr(cpu, (spsr & ~field_mask) | (imm32 & field_mask));
+        set_spsr(cpu, (spsr & ~byte_mask) | (imm32 & byte_mask));
     } else {
         if (armv4t_get_mode(cpu) == MODE_USR) {
-            field_mask &= 0xFF000000;
+            byte_mask &= 0xFF000000;
         }
 
-        armv4t_psr result = (cpu->cpsr & ~field_mask) | (imm32 & field_mask);
+        armv4t_psr result = (cpu->cpsr & ~byte_mask) | (imm32 & byte_mask);
         armv4t_set_mode(cpu, result & 0x1F);
         cpu->cpsr = result;
     }
@@ -764,14 +766,14 @@ static void swap_inst(armv4t_cpu *cpu, uint32_t inst) {
 }
 
 static void swi_inst(armv4t_cpu *cpu) {
-    // TODO: Implement
+    raise_swi(cpu);
 }
 
 void arm_step(armv4t_cpu *cpu) {
     uint32_t inst;
     armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, cpu->regs[REG_PC], &inst);
     if (fsr != 0) {
-        raise_prefetch_abort(cpu, fsr, cpu->regs[REG_PC]);
+        raise_prefetch_abort(cpu);
         return;
     }
 
@@ -786,10 +788,12 @@ void arm_step(armv4t_cpu *cpu) {
         } else if ((inst & BRANCH_MASK) == BRANCH_VALUE) {
             branch_inst(cpu, inst);
             branch = true;
-        } else if ((inst & PSR_REG_MASK) == PSR_REG_VALUE) {
-            psr_reg_inst(cpu, inst);
-        } else if ((inst & PSR_IMM_MASK) == PSR_IMM_VALUE) {
-            psr_imm_inst(cpu, inst);
+        } else if ((inst & MRS_MASK) == MRS_VALUE) {
+            mrs_inst(cpu, inst);
+        } else if ((inst & MSR_REG_MASK) == MSR_REG_VALUE) {
+            msr_reg_inst(cpu, inst);
+        } else if ((inst & MSR_IMM_MASK) == MSR_IMM_VALUE) {
+            msr_imm_inst(cpu, inst);
         } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
             data_shift_imm_inst(cpu, inst, &branch);
         } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
@@ -815,7 +819,7 @@ void arm_step(armv4t_cpu *cpu) {
         } else if ((inst & SWI_MASK) == SWI_VALUE) {
             swi_inst(cpu);
         } else {
-            raise_undefined(cpu, inst);
+            raise_undefined(cpu);
         }
     }
 

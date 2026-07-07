@@ -35,9 +35,9 @@ bool has_cond(armv4t_cpu *cpu, uint32_t cond);
 void raise_irq(armv4t_cpu *cpu);
 void raise_fiq(armv4t_cpu *cpu);
 void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa);
-void raise_prefetch_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa);
-void raise_undefined(armv4t_cpu *cpu, uint32_t inst);
-void raise_swi(armv4t_cpu *cpu, uint32_t imm);
+void raise_prefetch_abort(armv4t_cpu *cpu);
+void raise_undefined(armv4t_cpu *cpu);
+void raise_swi(armv4t_cpu *cpu);
 
 armv4t_psr get_spsr(armv4t_cpu *cpu);
 void set_spsr(armv4t_cpu *cpu, armv4t_psr spsr);

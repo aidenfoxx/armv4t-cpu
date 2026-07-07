@@ -76,6 +76,5 @@ void armv4t_cpu_destroy(armv4t_cpu *cpu);
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
 void armv4t_step(armv4t_cpu *cpu);
-void armv4t_reset(armv4t_cpu *cpu);
 
 #endif // ARMV4T_CPU_H
