@@ -27,27 +27,14 @@ static inline uint32_t get_bits(uint32_t value, uint32_t offset, uint32_t count)
 #define __has_builtin(x) 0
 #endif
 
-static inline uint32_t ror32(uint32_t value, uint32_t count) {
-#if __has_builtin(__builtin_rotateright32)
-    return __builtin_rotateright32(value, count);
-#elif __has_builtin(__builtin_stdc_rotate_right)
-    return __builtin_stdc_rotate_right(value, count);
-#elif defined(_MSC_VER)
-    return _rotr(value, count);
-#else
-    return (value >> count) | (value << (32 - count));
-#endif
-}
-
 static inline int popcount32(uint32_t value) {
 #if __has_builtin(__builtin_popcount)
     return __builtin_popcount(value);
-#elif defined(_MSC_VER)
-    return __popcnt(value);
 #else
     int count = 0;
-    for (; value != 0; count++) {
+    while (value != 0) {
         value &= value - 1;
+        count++;
     }
     return count;
 #endif

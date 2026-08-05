@@ -8,7 +8,6 @@ The system requires the consumer to provide an MMU implementation via `armv4t/mm
 
 - [x] ARM instruction set.
 - [ ] Thumb instruction set.
-- [ ] Coprocessor instructions.
 
 ### Memory & Exceptions
 
@@ -22,3 +21,7 @@ The system requires the consumer to provide an MMU implementation via `armv4t/mm
 - [X] Big-endian mode.
 
 The system partially implements CP15, but many of the registers must be handled by the consumer MMU implementation. See the [example](example/) project.
+
+## Notes
+
+- It is highly recommended to enable Link Time Optimization (LTO) to ensure optimal performance.
