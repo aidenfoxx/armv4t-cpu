@@ -2,7 +2,7 @@
 
 A simple ARMv4T (ARM7T/ARM9T) interpreter written in C.
 
-The system requires the consumer to provide an MMU implementation via `armv4t/mmu.h`, which defines the required 8/16/32-bit load/store operations.
+The library requires consumers to provide an MMU implementation via `armv4t/mmu.h`, which defines the required 8/16/32-bit load/store operations.
 
 ## Features
 
@@ -20,8 +20,8 @@ The system requires the consumer to provide an MMU implementation via `armv4t/mm
 - [x] Fault status/address registers (c5, c6).
 - [X] Big-endian mode.
 
-The system partially implements CP15, but many of the registers must be handled by the consumer MMU implementation. See the [example](example/) project.
+_* The CPU partially implements CP15, but many of the registers must be handled by the consumer MMU implementation._
 
 ## Notes
 
-- It is highly recommended to enable Link Time Optimization (LTO) to ensure optimal performance.
+- It is recommended to enable Link Time Optimization (LTO) for optimal performance.

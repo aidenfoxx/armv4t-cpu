@@ -4,7 +4,6 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
 
 enum {
     VEC_UND = 0x04,
@@ -30,11 +29,8 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
     armv4t_branch(cpu, vector);
 }
 
-static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
+static uint32_t *get_sp_lr_bank(armv4t_cpu *cpu, armv4t_mode mode) {
     switch (mode) {
-    case MODE_USR:
-    case MODE_SYS:
-        return cpu->_internal->sp_lr.usr_sys;
     case MODE_FIQ:
         return cpu->_internal->sp_lr.fiq;
     case MODE_IRQ:
@@ -46,34 +42,33 @@ static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     case MODE_UND:
         return cpu->_internal->sp_lr.und;
     default:
+        // Mode doesn't have banked registers
         return NULL;
     }
 }
 
-static uint32_t *get_r8_r12(armv4t_cpu *cpu, armv4t_mode mode) {
-    return mode == MODE_FIQ ? cpu->_internal->r8_r12_fiq : cpu->_internal->r8_r12_other;
+static void swap_bank(uint32_t *regs, uint32_t *bank, int count) {
+    for (int i = 0; i < count; i++) {
+        uint32_t tmp = regs[i];
+        regs[i] = bank[i];
+        bank[i] = tmp;
+    }
 }
 
 static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to) {
-    uint32_t *from_sp_lr = get_sp_lr(cpu, from);
-    uint32_t *to_sp_lr = get_sp_lr(cpu, to);
-    if (from_sp_lr != NULL && to_sp_lr != NULL) {
-        memcpy(from_sp_lr, &cpu->regs[REG_SP], 2 * sizeof(uint32_t));
-        memcpy(&cpu->regs[REG_SP], to_sp_lr, 2 * sizeof(uint32_t));
+    uint32_t *from_sp_lr = get_sp_lr_bank(cpu, from);
+    if (from_sp_lr != NULL) {
+        swap_bank(&cpu->regs[REG_SP], from_sp_lr, 2);
+    }
+
+    uint32_t *to_sp_lr = get_sp_lr_bank(cpu, to);
+    if (to_sp_lr != NULL) {
+        swap_bank(&cpu->regs[REG_SP], to_sp_lr, 2);
     }
 
     if ((from == MODE_FIQ) != (to == MODE_FIQ)) {
-        uint32_t *from_r8_r12 = get_r8_r12(cpu, from);
-        uint32_t *to_r8_r12 = get_r8_r12(cpu, to);
-        memcpy(from_r8_r12, &cpu->regs[8], 5 * sizeof(uint32_t));
-        memcpy(&cpu->regs[8], to_r8_r12, 5 * sizeof(uint32_t));
+        swap_bank(&cpu->regs[8], cpu->_internal->r8_r12, 5);
     }
-}
-
-static bool modes_share_banks(armv4t_mode a, armv4t_mode b) {
-    bool a_usr_sys = a == MODE_USR || a == MODE_SYS;
-    bool b_usr_sys = b == MODE_USR || b == MODE_SYS;
-    return a == b || (a_usr_sys && b_usr_sys);
 }
 
 bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
@@ -102,31 +97,30 @@ void armv4t_cpu_destroy(armv4t_cpu *cpu) {
 
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     armv4t_mode current = armv4t_get_mode(cpu);
-    if (!modes_share_banks(current, mode)) {
-        switch_mode_banks(cpu, current, mode);
-    }
-
     if (mode != current) {
+        switch_mode_banks(cpu, current, mode);
         cpu->cpsr = (cpu->cpsr & ~0x1F) | mode;
     }
 }
 
 void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
-    cpu->_internal->irq_pending = irq;
+    cpu->_internal->irq_line = irq;
 }
 
 void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
-    cpu->_internal->fiq_pending = fiq;
+    cpu->_internal->fiq_line = fiq;
 }
 
 void armv4t_step(armv4t_cpu *cpu) {
-    if (cpu->_internal->fiq_pending && !get_flag(cpu, FLAG_FIQ)) {
-        take_fiq_exception(cpu, cpu->regs[REG_PC]);
+    if (cpu->_internal->fiq_line && !get_flag(cpu, FLAG_FIQ)) {
+        uint32_t lr = cpu->regs[REG_PC] + 4;
+        take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
         return;
     }
 
-    if (cpu->_internal->irq_pending && !get_flag(cpu, FLAG_IRQ)) {
-        take_irq_exception(cpu, cpu->regs[REG_PC]);
+    if (cpu->_internal->irq_line && !get_flag(cpu, FLAG_IRQ)) {
+        uint32_t lr = cpu->regs[REG_PC] + 4;
+        take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
         return;
     }
 
@@ -135,16 +129,6 @@ void armv4t_step(armv4t_cpu *cpu) {
     } else {
         arm_step(cpu);
     }
-}
-
-void take_fiq_exception(armv4t_cpu *cpu, uint32_t pc) {
-    uint32_t lr = pc + 4;
-    take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
-}
-
-void take_irq_exception(armv4t_cpu *cpu, uint32_t pc) {
-    uint32_t lr = pc + 4;
-    take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
 }
 
 void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc) {

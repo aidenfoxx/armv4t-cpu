@@ -28,19 +28,8 @@ enum {
 };
 
 struct armv4t_internal {
-    // TODO: Pick better names than "_pending"
-    bool irq_pending;
-    bool fiq_pending;
-    uint32_t r8_r12_fiq[5];
-    uint32_t r8_r12_other[5];
-    struct {
-        uint32_t usr_sys[2];
-        uint32_t fiq[2];
-        uint32_t irq[2];
-        uint32_t svc[2];
-        uint32_t abt[2];
-        uint32_t und[2];
-    } sp_lr;
+    bool irq_line;
+    bool fiq_line;
     struct {
         armv4t_psr fiq;
         armv4t_psr irq;
@@ -48,13 +37,20 @@ struct armv4t_internal {
         armv4t_psr abt;
         armv4t_psr und;
     } spsr;
+    /* banked registers */
+    uint32_t r8_r12[5];
+    struct {
+        uint32_t fiq[2];
+        uint32_t irq[2];
+        uint32_t svc[2];
+        uint32_t abt[2];
+        uint32_t und[2];
+    } sp_lr;
 };
 
 void arm_step(armv4t_cpu *cpu);
 void thumb_step(armv4t_cpu *cpu);
 
-void take_fiq_exception(armv4t_cpu *cpu, uint32_t pc);
-void take_irq_exception(armv4t_cpu *cpu, uint32_t pc);
 void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc);
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc);
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);
