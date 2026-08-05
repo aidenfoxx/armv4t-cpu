@@ -28,8 +28,6 @@ enum {
 };
 
 struct armv4t_internal {
-    // TODO: Do we actually need this branch flag?
-    bool branch;
     // TODO: Pick better names than "_pending"
     bool irq_pending;
     bool fiq_pending;
@@ -55,10 +53,12 @@ struct armv4t_internal {
 void arm_step(armv4t_cpu *cpu);
 void thumb_step(armv4t_cpu *cpu);
 
-void raise_prefetch_abort(armv4t_cpu *cpu);
-void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa);
-void raise_undefined(armv4t_cpu *cpu);
-void raise_swi(armv4t_cpu *cpu);
+void take_fiq_exception(armv4t_cpu *cpu, uint32_t pc);
+void take_irq_exception(armv4t_cpu *cpu, uint32_t pc);
+void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc);
+void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc);
+void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);
+void take_swi_exception(armv4t_cpu *cpu, uint32_t next_pc);
 
 void restore_spsr(armv4t_cpu *cpu);
 

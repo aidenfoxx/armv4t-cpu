@@ -52,7 +52,6 @@ void armv4t_set_irq(armv4t_cpu *cpu, bool irq);
 void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq);
 
 void armv4t_step(armv4t_cpu *cpu);
-void armv4t_branch(armv4t_cpu *cpu, uint32_t addr);
 
 /*
  * Inline helpers.
@@ -67,6 +66,10 @@ static inline bool armv4t_get_flag(const armv4t_cpu *cpu, armv4t_flag flag) {
 
 static inline void armv4t_set_flag(armv4t_cpu *cpu, armv4t_flag flag, bool value) {
     cpu->cpsr = value ? cpu->cpsr | (1u << flag) : cpu->cpsr & ~(1u << flag);
+}
+
+static inline void armv4t_branch(armv4t_cpu *cpu, uint32_t addr) {
+    cpu->regs[REG_PC] = armv4t_get_flag(cpu, FLAG_THUMB) ? addr & ~1 : addr & ~3;
 }
 
 static inline void armv4t_bx(armv4t_cpu *cpu, uint32_t addr) {

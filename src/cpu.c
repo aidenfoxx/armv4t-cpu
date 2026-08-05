@@ -120,14 +120,12 @@ void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
 
 void armv4t_step(armv4t_cpu *cpu) {
     if (cpu->_internal->fiq_pending && !get_flag(cpu, FLAG_FIQ)) {
-        uint32_t lr = cpu->regs[REG_PC] + 4;
-        take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
+        take_fiq_exception(cpu, cpu->regs[REG_PC]);
         return;
     }
 
     if (cpu->_internal->irq_pending && !get_flag(cpu, FLAG_IRQ)) {
-        uint32_t lr = cpu->regs[REG_PC] + 4;
-        take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
+        take_irq_exception(cpu, cpu->regs[REG_PC]);
         return;
     }
 
@@ -138,32 +136,35 @@ void armv4t_step(armv4t_cpu *cpu) {
     }
 }
 
-void armv4t_branch(armv4t_cpu *cpu, uint32_t addr) {
-    cpu->regs[REG_PC] = get_flag(cpu, FLAG_THUMB) ? addr & ~1 : addr & ~3;
-    cpu->_internal->branch = true;
+void take_fiq_exception(armv4t_cpu *cpu, uint32_t pc) {
+    uint32_t lr = pc + 4;
+    take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
 }
 
-void raise_prefetch_abort(armv4t_cpu *cpu) {
-    uint32_t lr = cpu->regs[REG_PC] + 4; // LR = PC + #4
+void take_irq_exception(armv4t_cpu *cpu, uint32_t pc) {
+    uint32_t lr = pc + 4;
+    take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
+}
+
+void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc) {
+    uint32_t lr = pc + 4;
     take_exception(cpu, MODE_ABT, VEC_PABT, lr);
 }
 
-void raise_data_abort(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa) {
+void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc) {
     cpu->cp15[5] = fsr;
     cpu->cp15[6] = fsa;
 
-    uint32_t lr = cpu->regs[REG_PC] + (get_flag(cpu, FLAG_THUMB) ? 4 : 0); // LR = PC + #8
+    uint32_t lr = pc + 8;
     take_exception(cpu, MODE_ABT, VEC_DABT, lr);
 }
 
-void raise_undefined(armv4t_cpu *cpu) {
-    uint32_t lr = cpu->regs[REG_PC] - (get_flag(cpu, FLAG_THUMB) ? 2 : 4); // LR = PC + #4
-    take_exception(cpu, MODE_UND, VEC_UND, lr);
+void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc) {
+    take_exception(cpu, MODE_UND, VEC_UND, next_pc);
 }
 
-void raise_swi(armv4t_cpu *cpu) {
-    uint32_t lr = cpu->regs[REG_PC] - (get_flag(cpu, FLAG_THUMB) ? 2 : 4); // LR = PC + #4
-    take_exception(cpu, MODE_SVC, VEC_SWI, lr);
+void take_swi_exception(armv4t_cpu *cpu, uint32_t next_pc) {
+    take_exception(cpu, MODE_SVC, VEC_SWI, next_pc);
 }
 
 void restore_spsr(armv4t_cpu *cpu) {
