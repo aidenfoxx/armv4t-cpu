@@ -46,8 +46,7 @@ static uint32_t *get_sp_lr(armv4t_cpu *cpu, armv4t_mode mode) {
     case MODE_UND:
         return cpu->_internal->sp_lr.und;
     default:
-        // We treat invalid modes as a no-op
-        return &cpu->regs[REG_SP];
+        return NULL;
     }
 }
 
@@ -58,8 +57,10 @@ static uint32_t *get_r8_r12(armv4t_cpu *cpu, armv4t_mode mode) {
 static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to) {
     uint32_t *from_sp_lr = get_sp_lr(cpu, from);
     uint32_t *to_sp_lr = get_sp_lr(cpu, to);
-    memcpy(from_sp_lr, &cpu->regs[REG_SP], 2 * sizeof(uint32_t));
-    memcpy(&cpu->regs[REG_SP], to_sp_lr, 2 * sizeof(uint32_t));
+    if (from_sp_lr != NULL && to_sp_lr != NULL) {
+        memcpy(from_sp_lr, &cpu->regs[REG_SP], 2 * sizeof(uint32_t));
+        memcpy(&cpu->regs[REG_SP], to_sp_lr, 2 * sizeof(uint32_t));
+    }
 
     if ((from == MODE_FIQ) != (to == MODE_FIQ)) {
         uint32_t *from_r8_r12 = get_r8_r12(cpu, from);

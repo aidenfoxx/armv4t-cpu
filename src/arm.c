@@ -697,10 +697,6 @@ static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
     }
 }
 
-/**
- * This method handles a number of quirks described at:
- * https://problemkaputt.de/gbatek-arm-opcodes-memory-block-data-transfer-ldm-stm.htm
- */
 static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
@@ -720,7 +716,6 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         addr += 4;
     }
 
-    bool rlist_rn = get_bit(rlist, rn);
     bool rlist_pc = get_bit(rlist, REG_PC);
 
     armv4t_mode current_mode = armv4t_get_mode(cpu);
@@ -730,7 +725,6 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     armv4t_fsr fsr = 0;
     uint32_t fsa;
-    uint32_t start_addr = addr;
     for (int i = 0; i < 16; i++, rlist >>= 1) {
         if ((rlist & 1) == 0) {
             continue;
@@ -742,12 +736,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
                 break;
             }
         } else { // Store
-            uint32_t value = reg_pc12(cpu, i, pc);
-            if (w && i == rn) {
-                value = addr == start_addr ? base_addr : offset_addr;
-            }
-
-            if (fsr = armv4t_st_32(cpu->_mmu, addr, value)) {
+            if (fsr = armv4t_st_32(cpu->_mmu, addr, reg_pc12(cpu, i, pc))) {
                 fsa = addr;
                 break;
             }
@@ -757,9 +746,9 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     }
 
 #ifdef ARMV4T_ARM7
-    if (w && (!l || !rlist_rn)) {
+    if (w) {
 #else
-    if (w && (!l || !rlist_rn) && fsr == 0) {
+    if (w && fsr == 0) {
 #endif
         cpu->regs[rn] = offset_addr;
     }
