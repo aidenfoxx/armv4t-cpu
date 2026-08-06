@@ -33,7 +33,7 @@ typedef uint32_t armv4t_psr;
 typedef struct {
     /* public */
     uint32_t regs[16];
-    uint32_t cp15[15];
+    uint32_t cp15[16];
     armv4t_psr cpsr;
     /* private */
     struct armv4t_mmu *_mmu;

@@ -37,6 +37,8 @@
 #define BLOCK_XFER_VALUE 0x08000000
 #define SWAP_MASK 0x0FB00FF0
 #define SWAP_VALUE 0x01000090
+#define CP_REG_XFER_MASK 0x0F000010
+#define CP_REG_XFER_VALUE 0x0E000010
 #define SWI_MASK 0x0F000000
 #define SWI_VALUE 0x0F000000
 
@@ -76,10 +78,6 @@ static uint32_t reg_pc8(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
 
 /**
  * A register read helper for operations which expect PC + #12 due to prefetching.
- * https://problemkaputt.de/gbatek-arm-opcodes-data-processing-alu.htm
- * https://problemkaputt.de/gbatek-arm-opcodes-memory-single-data-transfer-ldr-str-pld.htm
- * https://problemkaputt.de/gbatek-arm-opcodes-memory-halfword-doubleword-and-signed-data-transfer.htm
- * https://problemkaputt.de/gbatek-arm-opcodes-memory-block-data-transfer-ldm-stm.htm
  */
 static uint32_t reg_pc12(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
     return reg == REG_PC ? pc + 12 : cpu->regs[reg];
@@ -716,6 +714,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         addr += 4;
     }
 
+    bool rlist_rn = get_bit(rlist, rn);
     bool rlist_pc = get_bit(rlist, REG_PC);
 
     armv4t_mode current_mode = armv4t_get_mode(cpu);
@@ -725,6 +724,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     armv4t_fsr fsr = 0;
     uint32_t fsa;
+    uint32_t start_addr = addr;
     for (int i = 0; i < 16; i++, rlist >>= 1) {
         if ((rlist & 1) == 0) {
             continue;
@@ -736,7 +736,12 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
                 break;
             }
         } else { // Store
-            if (fsr = armv4t_st_32(cpu->_mmu, addr, reg_pc12(cpu, i, pc))) {
+            uint32_t value = reg_pc12(cpu, i, pc);
+            if (w && i == rn) {
+                 value = addr == start_addr ? base_addr : offset_addr;
+            }
+
+            if (fsr = armv4t_st_32(cpu->_mmu, addr, value)) {
                 fsa = addr;
                 break;
             }
@@ -745,15 +750,15 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         addr += 4;
     }
 
+    armv4t_set_mode(cpu, current_mode);
+
 #ifdef ARMV4T_ARM7
-    if (w) {
+    if (w && (!l || !rlist_rn)) {
 #else
-    if (w && fsr == 0) {
+    if (w && (!l || !rlist_rn) && fsr == 0) {
 #endif
         cpu->regs[rn] = offset_addr;
     }
-
-    armv4t_set_mode(cpu, current_mode);
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, fsa, pc);
@@ -798,6 +803,28 @@ static void swap_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
 static void swi_inst(armv4t_cpu *cpu, uint32_t pc) {
     take_swi_exception(cpu, pc + 4);
+}
+
+static void cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+    bool l = get_bit(inst, 20);
+    uint32_t crn = get_bits(inst, 16, 4);
+    uint32_t rd = get_bits(inst, 12, 4);
+    uint32_t cp_num = get_bits(inst, 8, 4);
+
+    if (cp_num != 15) {
+        take_undefined_exception(cpu, pc + 4);
+        return;
+    }
+
+    if (l) { // Load
+        if (rd == REG_PC) {
+            cpu->cpsr = (cpu->cpsr & 0x0FFFFFFF) | (cpu->cp15[crn] & 0xF0000000);
+        } else {
+            cpu->regs[rd] = cpu->cp15[crn];
+        }
+    } else { // Store
+        cpu->cp15[crn] = reg_pc12(cpu, rd, pc);
+    }
 }
 
 void arm_step(armv4t_cpu *cpu) {    
@@ -848,6 +875,8 @@ void arm_step(armv4t_cpu *cpu) {
             block_xfer_inst(cpu, inst, pc);
         } else if ((inst & SWI_MASK) == SWI_VALUE) {
             swi_inst(cpu, pc);
+        } else if ((inst & CP_REG_XFER_MASK) == CP_REG_XFER_VALUE) {
+            cp_reg_xfer_inst(cpu, inst, pc);
         } else {
             take_undefined_exception(cpu, pc + 4);
         }

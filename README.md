@@ -2,7 +2,7 @@
 
 A simple ARMv4T (ARM7T/ARM9T) interpreter written in C.
 
-The library requires consumers to provide an MMU implementation via `armv4t/mmu.h`, which defines the required 8/16/32-bit load/store operations.
+The project does not attempt to handle unpredictable behavior, and consumers requiring silicone accurate behavior may experience instability.
 
 ## Features
 
@@ -10,6 +10,8 @@ The library requires consumers to provide an MMU implementation via `armv4t/mmu.
 - [ ] Thumb instruction set.
 
 ### Memory & Exceptions
+
+The library requires consumers to provide an MMU implementation via `armv4t/mmu.h`, which defines the required 8/16/32-bit load/store operations.
 
 - [x] MMU interface.
   - [x] Load/store operations.
@@ -20,7 +22,7 @@ The library requires consumers to provide an MMU implementation via `armv4t/mmu.
 - [x] Fault status/address registers (c5, c6).
 - [X] Big-endian mode.
 
-_* The CPU partially implements CP15, but many of the registers must be handled by the consumer MMU implementation._
+_* The CPU partially implements CP15, but many of the registers and features must be implemented by the consumer._
 
 ## Notes
 
