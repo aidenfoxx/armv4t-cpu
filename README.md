@@ -2,7 +2,7 @@
 
 A simple ARMv4T (ARM7TDMI/ARM9TDMI) interpreter written in C.
 
-The project implements behavior defined by the ARM architecture data sheet. Unpredictable behavior is not handled specially.
+The project implements behavior defined by the ARM architecture data sheet. Unpredictable behavior is not handled specifically.
 
 ## Features
 
