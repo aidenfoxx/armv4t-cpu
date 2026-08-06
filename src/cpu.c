@@ -49,9 +49,9 @@ static uint32_t *get_sp_lr_bank(armv4t_cpu *cpu, armv4t_mode mode) {
 
 static void swap_bank(uint32_t *regs, uint32_t *bank, int count) {
     for (int i = 0; i < count; i++) {
-        uint32_t tmp = regs[i];
+        uint32_t temp = regs[i];
         regs[i] = bank[i];
-        bank[i] = tmp;
+        bank[i] = temp;
     }
 }
 

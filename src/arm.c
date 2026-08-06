@@ -71,7 +71,6 @@ enum {
 
 // A helper for operations which expect PC + #8 due to prefetching
 static uint32_t reg_pc8(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
-
     return reg == REG_PC ? pc + 8 : cpu->regs[reg];
 }
 
