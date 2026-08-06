@@ -37,10 +37,10 @@
 #define BLOCK_XFER_VALUE 0x08000000
 #define SWAP_MASK 0x0FB00FF0
 #define SWAP_VALUE 0x01000090
-#define CP_REG_XFER_MASK 0x0F000010
-#define CP_REG_XFER_VALUE 0x0E000010
 #define SWI_MASK 0x0F000000
 #define SWI_VALUE 0x0F000000
+#define CP_REG_XFER_MASK 0x0F000010
+#define CP_REG_XFER_VALUE 0x0E000010
 
 enum {
     OP_AND = 0,
@@ -69,16 +69,13 @@ enum {
     SHIFT_RRX,
 };
 
-/**
- * A register read helper for operations which expect PC + #8 due to prefetching.
- */
+// A helper for operations which expect PC + #8 due to prefetching
 static uint32_t reg_pc8(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
+    
     return reg == REG_PC ? pc + 8 : cpu->regs[reg];
 }
 
-/**
- * A register read helper for operations which expect PC + #12 due to prefetching.
- */
+// A helper for operations which expect PC + #12 due to prefetching
 static uint32_t reg_pc12(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
     return reg == REG_PC ? pc + 12 : cpu->regs[reg];
 }
@@ -839,44 +836,45 @@ void arm_step(armv4t_cpu *cpu) {
 
     cpu->regs[REG_PC] += 4;
 
+    // Sorted to favor high frequency instructions where possible
     uint32_t cond = get_bits(inst, 28, 4);
     if (has_cond(cpu, cond)) {
-        if ((inst & BRANCH_EX_MASK) == BRANCH_EX_VALUE) {
-            branch_ex_inst(cpu, inst);
+        if ((inst & SINGLE_XFER_IMM_MASK) == SINGLE_XFER_IMM_VALUE) {
+            single_xfer_imm_inst(cpu, inst, pc);
         } else if ((inst & BRANCH_MASK) == BRANCH_VALUE) {
             branch_inst(cpu, inst, pc);
         } else if ((inst & MRS_MASK) == MRS_VALUE) {
             mrs_inst(cpu, inst);
         } else if ((inst & MSR_REG_MASK) == MSR_REG_VALUE) {
             msr_reg_inst(cpu, inst);
-        } else if ((inst & MSR_IMM_MASK) == MSR_IMM_VALUE) {
-            msr_imm_inst(cpu, inst);
         } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
             data_shift_imm_inst(cpu, inst, pc);
-        } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
-            data_shift_reg_inst(cpu, inst, pc);
+        } else if ((inst & MSR_IMM_MASK) == MSR_IMM_VALUE) {
+            msr_imm_inst(cpu, inst);
         } else if ((inst & DATA_IMM_MASK) == DATA_IMM_VALUE) {
             data_imm_inst(cpu, inst, pc);
+        } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
+            block_xfer_inst(cpu, inst, pc);
+        } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
+            single_xfer_reg_inst(cpu, inst, pc);
+        } else if ((inst & BRANCH_EX_MASK) == BRANCH_EX_VALUE) {
+            branch_ex_inst(cpu, inst);
+        } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
+            data_shift_reg_inst(cpu, inst, pc);
         } else if ((inst & MUL_MASK) == MUL_VALUE) {
             mul_inst(cpu, inst);
         } else if ((inst & MUL_LONG_MASK) == MUL_LONG_VALUE) {
             mul_long_inst(cpu, inst);
-        } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
-            single_xfer_reg_inst(cpu, inst, pc);
-        } else if ((inst & SINGLE_XFER_IMM_MASK) == SINGLE_XFER_IMM_VALUE) {
-            single_xfer_imm_inst(cpu, inst, pc);
         } else if ((inst & SWAP_MASK) == SWAP_VALUE) {
             swap_inst(cpu, inst, pc);
         } else if ((inst & HALFWORD_XFER_REG_MASK) == HALFWORD_XFER_REG_VALUE) {
             halfword_xfer_reg_inst(cpu, inst, pc);
         } else if ((inst & HALFWORD_XFER_IMM_MASK) == HALFWORD_XFER_IMM_VALUE) {
             halfword_xfer_imm_inst(cpu, inst, pc);
-        } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
-            block_xfer_inst(cpu, inst, pc);
-        } else if ((inst & SWI_MASK) == SWI_VALUE) {
-            swi_inst(cpu, pc);
         } else if ((inst & CP_REG_XFER_MASK) == CP_REG_XFER_VALUE) {
             cp_reg_xfer_inst(cpu, inst, pc);
+        } else if ((inst & SWI_MASK) == SWI_VALUE) {
+            swi_inst(cpu, pc);
         } else {
             take_undefined_exception(cpu, pc + 4);
         }
