@@ -71,7 +71,7 @@ enum {
 
 // A helper for operations which expect PC + #8 due to prefetching
 static uint32_t reg_pc8(const armv4t_cpu *cpu, uint32_t reg, uint32_t pc) {
-    
+
     return reg == REG_PC ? pc + 8 : cpu->regs[reg];
 }
 
@@ -735,7 +735,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         } else { // Store
             uint32_t value = reg_pc12(cpu, i, pc);
             if (w && i == rn) {
-                 value = addr == start_addr ? base_addr : offset_addr;
+                value = addr == start_addr ? base_addr : offset_addr;
             }
 
             if (fsr = armv4t_st_32(cpu->_mmu, addr, value)) {
@@ -824,7 +824,7 @@ static void cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     }
 }
 
-void arm_step(armv4t_cpu *cpu) {    
+void arm_step(armv4t_cpu *cpu) {
     uint32_t pc = cpu->regs[REG_PC];
 
     uint32_t inst;

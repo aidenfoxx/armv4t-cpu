@@ -24,7 +24,7 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
     if (mode == MODE_FIQ) {
         armv4t_set_flag(cpu, FLAG_FIQ, true);
     }
-    
+
     cpu->regs[REG_LR] = lr;
     armv4t_branch(cpu, vector);
 }
@@ -82,13 +82,12 @@ bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
         free(*cpu);
         return false;
     }
-    
+
     (*cpu)->cpsr = MODE_SYS;
     (*cpu)->_mmu = mmu;
     (*cpu)->_internal = internal;
     return true;
 }
-
 
 void armv4t_cpu_destroy(armv4t_cpu *cpu) {
     free(cpu->_internal);
