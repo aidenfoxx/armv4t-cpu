@@ -1,8 +1,8 @@
 # ARMv4T CPU
 
-A simple ARMv4T (ARM7T/ARM9T) interpreter written in C.
+A simple ARMv4T (ARM7TDMI/ARM9TDMI) interpreter written in C.
 
-The project does not attempt to handle unpredictable behavior, and consumers requiring silicone accurate behavior may experience instability.
+The project implements behavior defined by the ARM architecture data sheet. Unpredictable behavior is not handled specially.
 
 ## Features
 
@@ -11,19 +11,19 @@ The project does not attempt to handle unpredictable behavior, and consumers req
 
 ### Memory & Exceptions
 
-The library requires consumers to provide an MMU implementation via `armv4t/mmu.h`, which defines the required 8/16/32-bit load/store operations.
+The library requires consumers to provide an MMU implementation via `armv4t/mmu.h`, which defines the nescessary 8/16/32-bit load/store operations. The MMU is responsible for aligned address handling: unaligned word access should either rotate the result or return an alignment fault.
 
 - [x] MMU interface.
   - [x] Load/store operations.
   - [x] Data aborts.
-- [x] Undefined instruction aborts.
-- [x] Execution aborts.
-- [x] Interrupts (IRQ/FIQ/SWI).
-- [x] Fault status/address registers (c5, c6).
-- [X] Big-endian mode.
+  - [ ] User mode access.
+- [x] Exceptions (undefined, SWI, prefetch/data abort).
+- [x] Interrupts (IRQ/FIQ).
+- [x] Fault status/address registers (c5, c6)*.
 
-_* The CPU partially implements CP15, but many of the registers and features must be implemented by the consumer._
+_* Other CP15 registers are left to the consumer._
 
 ## Notes
 
-- It is recommended to enable Link Time Optimization (LTO) for optimal performance.
+- The CPU initializes in SYS mode with interrupts enabled, not the architectural reset state.
+- Enable LTO in both this library and the consuming project for optimal performance.
