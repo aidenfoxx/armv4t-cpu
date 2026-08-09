@@ -39,12 +39,8 @@ static inline uint32_t get_bits(uint32_t value, uint32_t offset, uint32_t count)
     return (value >> offset) & ((1u << count) - 1);
 }
 
-#ifndef __has_builtin
-#define __has_builtin(x) 0
-#endif
-
 static inline int popcount32(uint32_t value) {
-#if __has_builtin(__builtin_popcount)
+#ifdef __GNUC__
     return __builtin_popcount(value);
 #else
     int count = 0;
