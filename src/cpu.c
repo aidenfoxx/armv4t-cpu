@@ -1,6 +1,7 @@
 #include "cpu.h"
 #include "armv4t/cpu.h"
 #include "armv4t/mmu.h"
+#include "utils.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@ enum {
     VEC_FIQ = 0x1C,
 };
 
+NOINLINE
 static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, uint32_t lr) {
     armv4t_psr cpsr = cpu->cpsr;
     armv4t_set_mode(cpu, mode);
@@ -111,13 +113,12 @@ void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
 }
 
 void armv4t_step(armv4t_cpu *cpu) {
-    if (cpu->_internal->fiq_line && !get_flag(cpu, FLAG_FIQ)) {
+    if (unlikely(cpu->_internal->fiq_line && !get_flag(cpu, FLAG_FIQ))) {
         uint32_t lr = cpu->regs[REG_PC] + 4;
         take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
         return;
     }
-
-    if (cpu->_internal->irq_line && !get_flag(cpu, FLAG_IRQ)) {
+    if (unlikely(cpu->_internal->irq_line && !get_flag(cpu, FLAG_IRQ))) {
         uint32_t lr = cpu->regs[REG_PC] + 4;
         take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
         return;

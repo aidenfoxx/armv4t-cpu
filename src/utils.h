@@ -6,6 +6,22 @@
 #include <stdint.h>
 
 #ifdef __GNUC__
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#else
+#define likely(x) (x)
+#define unlikely(x) (x)
+#endif
+
+#ifdef __GNUC__
+#define NOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
+#define NOINLINE __declspec(noinline)
+#else
+#define NOINLINE
+#endif
+
+#ifdef __GNUC__
 #define unreachable() (__builtin_unreachable())
 #elif defined(_MSC_VER)
 #define unreachable() (__assume(false))

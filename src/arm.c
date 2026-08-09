@@ -219,12 +219,12 @@ static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool
         return a ^ b;
     case OP_SUB:
     case OP_CMP:
-        return add_with_carry(a, ~b, 1, carry_out, overflow);
+        return add_with_carry(a, ~b, true, carry_out, overflow);
     case OP_RSB:
-        return add_with_carry(~a, b, 1, carry_out, overflow);
+        return add_with_carry(~a, b, true, carry_out, overflow);
     case OP_ADD:
     case OP_CMN:
-        return add_with_carry(a, b, 0, carry_out, overflow);
+        return add_with_carry(a, b, false, carry_out, overflow);
     case OP_ADC:
         return add_with_carry(a, b, carry_in, carry_out, overflow);
     case OP_SBC:
@@ -727,7 +727,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
 
         if (l) { // Load
-            if (fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[i])) {
+            if ((fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[i])) != 0) {
                 fsa = addr;
                 break;
             }
@@ -737,7 +737,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
                 value = addr == start_addr ? base_addr : offset_addr;
             }
 
-            if (fsr = armv4t_st_32(cpu->_mmu, addr, value)) {
+            if ((fsr = armv4t_st_32(cpu->_mmu, addr, value)) != 0) {
                 fsa = addr;
                 break;
             }

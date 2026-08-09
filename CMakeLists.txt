@@ -22,7 +22,6 @@ if(ipo_supported)
 endif()
 
 target_compile_features(armv4t-cpu PRIVATE c_std_99)
-target_compile_options(armv4t-cpu PRIVATE -Wno-parentheses)
 
 target_include_directories(armv4t-cpu
     PUBLIC
