@@ -35,8 +35,8 @@ typedef struct {
     uint32_t regs[16];
     uint32_t cp15[16];
     armv4t_psr cpsr;
+    struct armv4t_mmu *mmu;
     /* private */
-    struct armv4t_mmu *_mmu;
     struct armv4t_internal *_internal;
 } armv4t_cpu;
 

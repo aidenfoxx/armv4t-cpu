@@ -496,18 +496,18 @@ static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     if (l) {
         if (b) {
             uint8_t value;
-            if ((fsr = armv4t_ld_8(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_8(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = value;
             }
         } else {
-            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
+            fsr = armv4t_ld_32(cpu->mmu, addr, &cpu->regs[rd]);
         }
     } else {
         uint32_t value = reg_pc12(cpu, rd, pc);
         if (b) {
-            fsr = armv4t_st_8(cpu->_mmu, addr, value);
+            fsr = armv4t_st_8(cpu->mmu, addr, value);
         } else {
-            fsr = armv4t_st_32(cpu->_mmu, addr, value);
+            fsr = armv4t_st_32(cpu->mmu, addr, value);
         }
     }
 
@@ -545,18 +545,18 @@ static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     if (l) {
         if (b) {
             uint8_t value;
-            if ((fsr = armv4t_ld_8(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_8(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = value;
             }
         } else {
-            fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[rd]);
+            fsr = armv4t_ld_32(cpu->mmu, addr, &cpu->regs[rd]);
         }
     } else {
         uint32_t value = reg_pc12(cpu, rd, pc);
         if (b) {
-            fsr = armv4t_st_8(cpu->_mmu, addr, value);
+            fsr = armv4t_st_8(cpu->mmu, addr, value);
         } else {
-            fsr = armv4t_st_32(cpu->_mmu, addr, value);
+            fsr = armv4t_st_32(cpu->mmu, addr, value);
         }
     }
 
@@ -597,21 +597,21 @@ static void halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
         switch (type) {
         case 1: { // Halfword
             uint16_t value;
-            if ((fsr = armv4t_ld_16(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_16(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = value;
             }
             break;
         }
         case 2: { // Signed byte
             uint8_t value;
-            if ((fsr = armv4t_ld_8(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_8(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = (int32_t)(int8_t)value;
             }
             break;
         }
         case 3: { // Signed halfword
             uint16_t value;
-            if ((fsr = armv4t_ld_16(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_16(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = (int32_t)(int16_t)value;
             }
             break;
@@ -619,7 +619,7 @@ static void halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
         }
     } else { // Store
         uint32_t value = reg_pc12(cpu, rd, pc);
-        fsr = armv4t_st_16(cpu->_mmu, addr, value);
+        fsr = armv4t_st_16(cpu->mmu, addr, value);
     }
 
 #ifdef ARMV4T_ARM7
@@ -653,21 +653,21 @@ static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
         switch (type) {
         case 1: { // Halfword
             uint16_t value;
-            if ((fsr = armv4t_ld_16(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_16(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = value;
             }
             break;
         }
         case 2: { // Signed byte
             uint8_t value;
-            if ((fsr = armv4t_ld_8(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_8(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = (int32_t)(int8_t)value;
             }
             break;
         }
         case 3: { // Signed halfword
             uint16_t value;
-            if ((fsr = armv4t_ld_16(cpu->_mmu, addr, &value)) == 0) {
+            if ((fsr = armv4t_ld_16(cpu->mmu, addr, &value)) == 0) {
                 cpu->regs[rd] = (int32_t)(int16_t)value;
             }
             break;
@@ -675,7 +675,7 @@ static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
         }
     } else { // Store
         uint32_t value = reg_pc12(cpu, rd, pc);
-        fsr = armv4t_st_16(cpu->_mmu, addr, value);
+        fsr = armv4t_st_16(cpu->mmu, addr, value);
     }
 
 #ifdef ARMV4T_ARM7
@@ -727,7 +727,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
 
         if (l) { // Load
-            if ((fsr = armv4t_ld_32(cpu->_mmu, addr, &cpu->regs[i])) != 0) {
+            if ((fsr = armv4t_ld_32(cpu->mmu, addr, &cpu->regs[i])) != 0) {
                 fsa = addr;
                 break;
             }
@@ -737,7 +737,7 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
                 value = addr == start_addr ? base_addr : offset_addr;
             }
 
-            if ((fsr = armv4t_st_32(cpu->_mmu, addr, value)) != 0) {
+            if ((fsr = armv4t_st_32(cpu->mmu, addr, value)) != 0) {
                 fsa = addr;
                 break;
             }
@@ -779,13 +779,13 @@ static void swap_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     uint32_t result = 0;
     if (b) {
         uint8_t value;
-        if ((fsr = armv4t_ld_8(cpu->_mmu, addr, &value)) == 0) {
-            fsr = armv4t_st_8(cpu->_mmu, addr, cpu->regs[rm]);
+        if ((fsr = armv4t_ld_8(cpu->mmu, addr, &value)) == 0) {
+            fsr = armv4t_st_8(cpu->mmu, addr, cpu->regs[rm]);
             result = value;
         }
     } else {
-        if ((fsr = armv4t_ld_32(cpu->_mmu, addr, &result)) == 0) {
-            fsr = armv4t_st_32(cpu->_mmu, addr, cpu->regs[rm]);
+        if ((fsr = armv4t_ld_32(cpu->mmu, addr, &result)) == 0) {
+            fsr = armv4t_st_32(cpu->mmu, addr, cpu->regs[rm]);
         }
     }
 
@@ -827,7 +827,7 @@ void arm_step(armv4t_cpu *cpu) {
     uint32_t pc = cpu->regs[REG_PC];
 
     uint32_t inst;
-    armv4t_fsr fsr = armv4t_ld_32(cpu->_mmu, pc, &inst);
+    armv4t_fsr fsr = armv4t_ld_32(cpu->mmu, pc, &inst);
     if (fsr != 0) {
         take_prefetch_abort_exception(cpu, pc);
         return;

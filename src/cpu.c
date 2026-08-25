@@ -86,7 +86,7 @@ bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
     }
 
     (*cpu)->cpsr = MODE_SYS;
-    (*cpu)->_mmu = mmu;
+    (*cpu)->mmu = mmu;
     (*cpu)->_internal = internal;
     return true;
 }
