@@ -113,18 +113,18 @@ void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
 }
 
 void armv4t_step(armv4t_cpu *cpu) {
-    if (unlikely(cpu->_internal->fiq_line && !get_flag(cpu, FLAG_FIQ))) {
+    if (unlikely(cpu->_internal->fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ))) {
         uint32_t lr = cpu->regs[REG_PC] + 4;
         take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
         return;
     }
-    if (unlikely(cpu->_internal->irq_line && !get_flag(cpu, FLAG_IRQ))) {
+    if (unlikely(cpu->_internal->irq_line && !armv4t_get_flag(cpu, FLAG_IRQ))) {
         uint32_t lr = cpu->regs[REG_PC] + 4;
         take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
         return;
     }
 
-    if (get_flag(cpu, FLAG_THUMB)) {
+    if (armv4t_get_flag(cpu, FLAG_THUMB)) {
         thumb_step(cpu);
     } else {
         arm_step(cpu);

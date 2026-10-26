@@ -7,8 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define get_flag armv4t_get_flag
-
 enum {
     COND_EQ = 0,
     COND_NE,
@@ -62,35 +60,44 @@ void restore_spsr(armv4t_cpu *cpu);
  * Inline helpers.
  */
 static inline bool has_cond(armv4t_cpu *cpu, uint32_t cond) {
+    if (cond == COND_AL) {
+        return true;
+    }
+
+    bool n = armv4t_get_flag(cpu, FLAG_N);
+    bool z = armv4t_get_flag(cpu, FLAG_Z);
+    bool c = armv4t_get_flag(cpu, FLAG_C);
+    bool v = armv4t_get_flag(cpu, FLAG_V);
+
     switch (cond) {
     case COND_EQ:
-        return get_flag(cpu, FLAG_Z);
+        return z;
     case COND_NE:
-        return !get_flag(cpu, FLAG_Z);
+        return !z;
     case COND_CS:
-        return get_flag(cpu, FLAG_C);
+        return c;
     case COND_CC:
-        return !get_flag(cpu, FLAG_C);
+        return !c;
     case COND_MI:
-        return get_flag(cpu, FLAG_N);
+        return n;
     case COND_PL:
-        return !get_flag(cpu, FLAG_N);
+        return !n;
     case COND_VS:
-        return get_flag(cpu, FLAG_V);
+        return v;
     case COND_VC:
-        return !get_flag(cpu, FLAG_V);
+        return !v;
     case COND_HI:
-        return get_flag(cpu, FLAG_C) && !get_flag(cpu, FLAG_Z);
+        return c && !z;
     case COND_LS:
-        return !get_flag(cpu, FLAG_C) || get_flag(cpu, FLAG_Z);
+        return !c || z;
     case COND_GE:
-        return get_flag(cpu, FLAG_N) == get_flag(cpu, FLAG_V);
+        return n == v;
     case COND_LT:
-        return get_flag(cpu, FLAG_N) != get_flag(cpu, FLAG_V);
+        return n != v;
     case COND_GT:
-        return !get_flag(cpu, FLAG_Z) && get_flag(cpu, FLAG_N) == get_flag(cpu, FLAG_V);
+        return !z && n == v;
     case COND_LE:
-        return get_flag(cpu, FLAG_Z) || get_flag(cpu, FLAG_N) != get_flag(cpu, FLAG_V);
+        return z || n != v;
     case COND_AL:
         return true;
     default:

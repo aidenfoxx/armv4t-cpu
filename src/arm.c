@@ -835,41 +835,46 @@ void arm_step(armv4t_cpu *cpu) {
 
     cpu->regs[REG_PC] += 4;
 
-    // Sorted to favor high frequency instructions where possible
+    // Sorted to favor high frequency instructions where possible. Rare
+    // instructions that share a more common encoding are matched within it
     uint32_t cond = get_bits(inst, 28, 4);
     if (has_cond(cpu, cond)) {
         if ((inst & SINGLE_XFER_IMM_MASK) == SINGLE_XFER_IMM_VALUE) {
             single_xfer_imm_inst(cpu, inst, pc);
+        } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
+            if (unlikely((inst & MSR_REG_MASK) == MSR_REG_VALUE)) {
+                msr_reg_inst(cpu, inst);
+            } else if (unlikely((inst & MRS_MASK) == MRS_VALUE)) {
+                mrs_inst(cpu, inst);
+            } else {
+                data_shift_imm_inst(cpu, inst, pc);
+            }
+        } else if ((inst & DATA_IMM_MASK) == DATA_IMM_VALUE) {
+            if (unlikely((inst & MSR_IMM_MASK) == MSR_IMM_VALUE)) {
+                msr_imm_inst(cpu, inst);
+            } else {
+                data_imm_inst(cpu, inst, pc);
+            }
         } else if ((inst & BRANCH_MASK) == BRANCH_VALUE) {
             branch_inst(cpu, inst, pc);
-        } else if ((inst & MRS_MASK) == MRS_VALUE) {
-            mrs_inst(cpu, inst);
-        } else if ((inst & MSR_REG_MASK) == MSR_REG_VALUE) {
-            msr_reg_inst(cpu, inst);
-        } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
-            data_shift_imm_inst(cpu, inst, pc);
-        } else if ((inst & MSR_IMM_MASK) == MSR_IMM_VALUE) {
-            msr_imm_inst(cpu, inst);
-        } else if ((inst & DATA_IMM_MASK) == DATA_IMM_VALUE) {
-            data_imm_inst(cpu, inst, pc);
-        } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
-            block_xfer_inst(cpu, inst, pc);
-        } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
-            single_xfer_reg_inst(cpu, inst, pc);
         } else if ((inst & BRANCH_EX_MASK) == BRANCH_EX_VALUE) {
             branch_ex_inst(cpu, inst);
-        } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
-            data_shift_reg_inst(cpu, inst, pc);
+        } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
+            block_xfer_inst(cpu, inst, pc);
         } else if ((inst & MUL_MASK) == MUL_VALUE) {
             mul_inst(cpu, inst);
         } else if ((inst & MUL_LONG_MASK) == MUL_LONG_VALUE) {
             mul_long_inst(cpu, inst);
         } else if ((inst & SWAP_MASK) == SWAP_VALUE) {
             swap_inst(cpu, inst, pc);
-        } else if ((inst & HALFWORD_XFER_REG_MASK) == HALFWORD_XFER_REG_VALUE) {
-            halfword_xfer_reg_inst(cpu, inst, pc);
+        } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
+            single_xfer_reg_inst(cpu, inst, pc);
+        } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
+            data_shift_reg_inst(cpu, inst, pc);
         } else if ((inst & HALFWORD_XFER_IMM_MASK) == HALFWORD_XFER_IMM_VALUE) {
             halfword_xfer_imm_inst(cpu, inst, pc);
+        } else if ((inst & HALFWORD_XFER_REG_MASK) == HALFWORD_XFER_REG_VALUE) {
+            halfword_xfer_reg_inst(cpu, inst, pc);
         } else if ((inst & CP_REG_XFER_MASK) == CP_REG_XFER_VALUE) {
             cp_reg_xfer_inst(cpu, inst, pc);
         } else if ((inst & SWI_MASK) == SWI_VALUE) {
