@@ -98,8 +98,6 @@ static inline bool has_cond(armv4t_cpu *cpu, uint32_t cond) {
         return !z && n == v;
     case COND_LE:
         return z || n != v;
-    case COND_AL:
-        return true;
     default:
         return false;
     }
