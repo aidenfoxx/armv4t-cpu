@@ -15,10 +15,13 @@
 
 #ifdef __GNUC__
 #define NOINLINE __attribute__((noinline))
+#define FORCE_INLINE __attribute__((always_inline))
 #elif defined(_MSC_VER)
 #define NOINLINE __declspec(noinline)
+#define FORCE_INLINE __forceinline
 #else
 #define NOINLINE
+#define FORCE_INLINE inline
 #endif
 
 #ifdef __GNUC__

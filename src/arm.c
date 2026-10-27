@@ -130,6 +130,7 @@ static uint32_t rrx_c(uint32_t value, bool carry_in, bool *carry_out) {
     return ((uint32_t)carry_in << 31) | (value >> 1);
 }
 
+FORCE_INLINE
 static uint32_t shift_c(uint32_t value, uint32_t type, uint32_t amount, bool carry_in,
                         bool *carry_out) {
     if (amount == 0) {
@@ -173,6 +174,7 @@ static uint32_t decode_reg_shift(uint32_t type) {
     }
 }
 
+FORCE_INLINE
 static uint32_t decode_imm_shift(uint32_t type, uint32_t imm5, uint32_t *shift_n) {
     switch (type) {
     case 0:
@@ -208,6 +210,7 @@ static uint32_t expand_imm(uint32_t imm12, bool carry_in) {
     return expand_imm_c(imm12, carry_in, &_carry_out);
 }
 
+FORCE_INLINE
 static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool *carry_out,
                         bool *overflow) {
     switch (op) {
