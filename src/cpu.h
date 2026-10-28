@@ -25,27 +25,6 @@ enum {
     COND_AL
 };
 
-struct armv4t_internal {
-    bool irq_line;
-    bool fiq_line;
-    struct {
-        armv4t_psr fiq;
-        armv4t_psr irq;
-        armv4t_psr svc;
-        armv4t_psr abt;
-        armv4t_psr und;
-    } spsr;
-    /* banked registers */
-    uint32_t r8_r12[5];
-    struct {
-        uint32_t fiq[2];
-        uint32_t irq[2];
-        uint32_t svc[2];
-        uint32_t abt[2];
-        uint32_t und[2];
-    } sp_lr;
-};
-
 void arm_step(armv4t_cpu *cpu);
 void thumb_step(armv4t_cpu *cpu);
 
@@ -107,15 +86,15 @@ static inline armv4t_psr get_spsr(armv4t_cpu *cpu) {
     armv4t_mode mode = armv4t_get_mode(cpu);
     switch (mode) {
     case MODE_FIQ:
-        return cpu->_internal->spsr.fiq;
+        return cpu->_internal.spsr.fiq;
     case MODE_IRQ:
-        return cpu->_internal->spsr.irq;
+        return cpu->_internal.spsr.irq;
     case MODE_SVC:
-        return cpu->_internal->spsr.svc;
+        return cpu->_internal.spsr.svc;
     case MODE_ABT:
-        return cpu->_internal->spsr.abt;
+        return cpu->_internal.spsr.abt;
     case MODE_UND:
-        return cpu->_internal->spsr.und;
+        return cpu->_internal.spsr.und;
     default:
         // Mode doesn't have SPSR
         return 0;
@@ -126,19 +105,19 @@ static inline void set_spsr(armv4t_cpu *cpu, armv4t_psr spsr) {
     armv4t_mode mode = armv4t_get_mode(cpu);
     switch (mode) {
     case MODE_FIQ:
-        cpu->_internal->spsr.fiq = spsr;
+        cpu->_internal.spsr.fiq = spsr;
         break;
     case MODE_IRQ:
-        cpu->_internal->spsr.irq = spsr;
+        cpu->_internal.spsr.irq = spsr;
         break;
     case MODE_SVC:
-        cpu->_internal->spsr.svc = spsr;
+        cpu->_internal.spsr.svc = spsr;
         break;
     case MODE_ABT:
-        cpu->_internal->spsr.abt = spsr;
+        cpu->_internal.spsr.abt = spsr;
         break;
     case MODE_UND:
-        cpu->_internal->spsr.und = spsr;
+        cpu->_internal.spsr.und = spsr;
         break;
     default:
         // Mode doesn't have SPSR

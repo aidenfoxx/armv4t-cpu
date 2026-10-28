@@ -4,7 +4,7 @@
 #include "utils.h"
 
 #include <stdint.h>
-#include <stdlib.h>
+#include <string.h>
 
 enum {
     VEC_UND = 0x04,
@@ -34,15 +34,15 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
 static uint32_t *get_sp_lr_bank(armv4t_cpu *cpu, armv4t_mode mode) {
     switch (mode) {
     case MODE_FIQ:
-        return cpu->_internal->sp_lr.fiq;
+        return cpu->_internal.sp_lr.fiq;
     case MODE_IRQ:
-        return cpu->_internal->sp_lr.irq;
+        return cpu->_internal.sp_lr.irq;
     case MODE_SVC:
-        return cpu->_internal->sp_lr.svc;
+        return cpu->_internal.sp_lr.svc;
     case MODE_ABT:
-        return cpu->_internal->sp_lr.abt;
+        return cpu->_internal.sp_lr.abt;
     case MODE_UND:
-        return cpu->_internal->sp_lr.und;
+        return cpu->_internal.sp_lr.und;
     default:
         // Mode doesn't have banked registers
         return NULL;
@@ -69,31 +69,14 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
     }
 
     if ((from == MODE_FIQ) != (to == MODE_FIQ)) {
-        swap_bank(&cpu->regs[8], cpu->_internal->r8_r12, 5);
+        swap_bank(&cpu->regs[8], cpu->_internal.r8_r12, 5);
     }
 }
 
-bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu) {
-    *cpu = calloc(1, sizeof(armv4t_cpu));
-    if (*cpu == NULL) {
-        return false;
-    }
-
-    struct armv4t_internal *internal = calloc(1, sizeof(struct armv4t_internal));
-    if (internal == NULL) {
-        free(*cpu);
-        return false;
-    }
-
-    (*cpu)->cpsr = MODE_SYS;
-    (*cpu)->mmu = mmu;
-    (*cpu)->_internal = internal;
-    return true;
-}
-
-void armv4t_cpu_destroy(armv4t_cpu *cpu) {
-    free(cpu->_internal);
-    free(cpu);
+void armv4t_cpu_init(armv4t_cpu *cpu, struct armv4t_mmu *mmu) {
+    memset(cpu, 0, sizeof(armv4t_cpu));
+    cpu->cpsr = MODE_SYS;
+    cpu->mmu = mmu;
 }
 
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
@@ -104,22 +87,14 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
-    cpu->_internal->irq_line = irq;
-}
-
-void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
-    cpu->_internal->fiq_line = fiq;
-}
-
 void armv4t_step(armv4t_cpu *cpu) {
-    if (unlikely(cpu->_internal->fiq_line | cpu->_internal->irq_line)) {
-        if (cpu->_internal->fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
+    if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
+        if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
             uint32_t lr = cpu->regs[REG_PC] + 4;
             take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
             return;
         }
-        if (cpu->_internal->irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
+        if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
             uint32_t lr = cpu->regs[REG_PC] + 4;
             take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
             return;

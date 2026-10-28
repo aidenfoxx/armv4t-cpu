@@ -37,19 +37,33 @@ typedef struct {
     armv4t_psr cpsr;
     struct armv4t_mmu *mmu;
     /* private */
-    struct armv4t_internal *_internal;
+    struct {
+        bool irq_line;
+        bool fiq_line;
+        struct {
+            armv4t_psr fiq;
+            armv4t_psr irq;
+            armv4t_psr svc;
+            armv4t_psr abt;
+            armv4t_psr und;
+        } spsr;
+        /* banked registers */
+        uint32_t r8_r12[5];
+        struct {
+            uint32_t fiq[2];
+            uint32_t irq[2];
+            uint32_t svc[2];
+            uint32_t abt[2];
+            uint32_t und[2];
+        } sp_lr;
+    } _internal;
 } armv4t_cpu;
 
 /*
  * Public API.
  */
-bool armv4t_cpu_init(armv4t_cpu **cpu, struct armv4t_mmu *mmu);
-void armv4t_cpu_destroy(armv4t_cpu *cpu);
-
+void armv4t_cpu_init(armv4t_cpu *cpu, struct armv4t_mmu *mmu);
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
-
-void armv4t_set_irq(armv4t_cpu *cpu, bool irq);
-void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq);
 
 void armv4t_step(armv4t_cpu *cpu);
 
@@ -58,6 +72,14 @@ void armv4t_step(armv4t_cpu *cpu);
  */
 static inline armv4t_mode armv4t_get_mode(const armv4t_cpu *cpu) {
     return (armv4t_mode)(cpu->cpsr & 0x1F);
+}
+
+static inline void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
+    cpu->_internal.irq_line = irq;
+}
+
+static inline void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
+    cpu->_internal.fiq_line = fiq;
 }
 
 static inline bool armv4t_get_flag(const armv4t_cpu *cpu, armv4t_flag flag) {
