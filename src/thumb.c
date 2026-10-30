@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 // TODO: Implement
-void thumb_step(armv4t_cpu *cpu) {
-    take_undefined_exception(cpu, cpu->regs[REG_PC] + 2);
+void thumb_exec(armv4t_cpu *cpu, uint16_t inst, uint32_t pc) {
+    (void)inst;
+    take_undefined_exception(cpu, pc + 2);
 }

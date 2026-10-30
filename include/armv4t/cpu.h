@@ -38,8 +38,10 @@ typedef struct {
     struct armv4t_mmu *mmu;
     /* private */
     struct {
-        bool irq_line;
+        bool branch;
+        bool exception;
         bool fiq_line;
+        bool irq_line;
         struct {
             armv4t_psr fiq;
             armv4t_psr irq;
@@ -65,7 +67,9 @@ typedef struct {
 void armv4t_cpu_init(armv4t_cpu *cpu, struct armv4t_mmu *mmu);
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
-void armv4t_step(armv4t_cpu *cpu);
+uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception);
+
+void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr);
 
 /*
  * Inline helpers.
@@ -74,12 +78,12 @@ static inline armv4t_mode armv4t_get_mode(const armv4t_cpu *cpu) {
     return (armv4t_mode)(cpu->cpsr & 0x1F);
 }
 
-static inline void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
-    cpu->_internal.irq_line = irq;
-}
-
 static inline void armv4t_set_fiq(armv4t_cpu *cpu, bool fiq) {
     cpu->_internal.fiq_line = fiq;
+}
+
+static inline void armv4t_set_irq(armv4t_cpu *cpu, bool irq) {
+    cpu->_internal.irq_line = irq;
 }
 
 static inline bool armv4t_get_flag(const armv4t_cpu *cpu, armv4t_flag flag) {
@@ -92,6 +96,7 @@ static inline void armv4t_set_flag(armv4t_cpu *cpu, armv4t_flag flag, bool value
 
 static inline void armv4t_branch(armv4t_cpu *cpu, uint32_t addr) {
     cpu->regs[REG_PC] = armv4t_get_flag(cpu, FLAG_THUMB) ? addr & ~1 : addr & ~3;
+    cpu->_internal.branch = true;
 }
 
 static inline void armv4t_bx(armv4t_cpu *cpu, uint32_t addr) {

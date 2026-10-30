@@ -18,6 +18,7 @@ The library requires consumers to provide an MMU implementation via `armv4t/mmu.
   - [x] Data aborts.
   - [ ] User mode access.
 - [x] Exceptions (undefined, SWI, prefetch/data abort).
+  - [ ] High vectors.
 - [x] Interrupts (IRQ/FIQ).
 - [x] Fault status/address registers (c5, c6)*.
 

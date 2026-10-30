@@ -15,7 +15,6 @@ enum {
     VEC_FIQ = 0x1C,
 };
 
-NOINLINE
 static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, uint32_t lr) {
     armv4t_psr cpsr = cpu->cpsr;
     armv4t_set_mode(cpu, mode);
@@ -25,6 +24,9 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
     armv4t_set_flag(cpu, FLAG_IRQ, true);
     if (mode == MODE_FIQ) {
         armv4t_set_flag(cpu, FLAG_FIQ, true);
+    } else if (mode != MODE_IRQ) {
+        // Don't treat FIQ or IRQ as exceptions
+        cpu->_internal.exception = true;
     }
 
     cpu->regs[REG_LR] = lr;
@@ -87,30 +89,62 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-void armv4t_step(armv4t_cpu *cpu) {
-    if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
-        if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
-            uint32_t lr = cpu->regs[REG_PC] + 4;
-            take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
-            return;
+uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
+    // Clear any branches made outside of the run loop
+    cpu->_internal.branch = false;
+
+    uint32_t pc = cpu->regs[REG_PC];
+    for (uint64_t i = 0; i < steps; i++) {
+        uint32_t lr = pc + 4;
+        if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
+            if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
+                take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
+            }
+            if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
+                take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
+            }
         }
-        if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
-            uint32_t lr = cpu->regs[REG_PC] + 4;
-            take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
-            return;
+
+        if (likely(!cpu->_internal.branch)) {
+            if (armv4t_get_flag(cpu, FLAG_THUMB)) {
+                uint16_t inst;
+                if (armv4t_ld_16(cpu->mmu, pc, &inst) != 0) {
+                    take_exception(cpu, MODE_ABT, VEC_PABT, lr);
+                } else {
+                    thumb_exec(cpu, inst, pc);
+                    pc += 2;
+                }
+            } else {
+                uint32_t inst;
+                if (armv4t_ld_32(cpu->mmu, pc, &inst) != 0) {
+                    take_exception(cpu, MODE_ABT, VEC_PABT, lr);
+                } else {
+                    arm_exec(cpu, inst, pc);
+                    pc += 4;
+                }
+            }
+        }
+
+        if (unlikely(cpu->_internal.branch)) {
+            if (unlikely(cpu->_internal.exception)) {
+                cpu->_internal.exception = false;
+                if (halt_on_exception) {
+                    return i;
+                }
+            }
+
+            cpu->_internal.branch = false;
+            pc = cpu->regs[REG_PC];
         }
     }
 
-    if (armv4t_get_flag(cpu, FLAG_THUMB)) {
-        thumb_step(cpu);
-    } else {
-        arm_step(cpu);
-    }
+    cpu->regs[REG_PC] = pc;
+    return steps;
 }
 
-void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc) {
-    uint32_t lr = pc + 4;
-    take_exception(cpu, MODE_ABT, VEC_PABT, lr);
+void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr) {
+    restore_spsr(cpu);
+    armv4t_branch(cpu, addr);
 }
 
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc) {

@@ -25,10 +25,9 @@ enum {
     COND_AL
 };
 
-void arm_step(armv4t_cpu *cpu);
-void thumb_step(armv4t_cpu *cpu);
+void arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc);
+void thumb_exec(armv4t_cpu *cpu, uint16_t inst, uint32_t pc);
 
-void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc);
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc);
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);
 void take_swi_exception(armv4t_cpu *cpu, uint32_t next_pc);
