@@ -108,7 +108,7 @@ uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
         if (likely(!cpu->_internal.branch)) {
             if (armv4t_get_flag(cpu, FLAG_THUMB)) {
                 uint16_t inst;
-                if (armv4t_ld_16(cpu->mmu, pc, &inst) != 0) {
+                if (unlikely(armv4t_ld_16(cpu->mmu, pc, &inst) != 0)) {
                     take_exception(cpu, MODE_ABT, VEC_PABT, lr);
                 } else {
                     thumb_exec(cpu, inst, pc);
@@ -116,7 +116,7 @@ uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
                 }
             } else {
                 uint32_t inst;
-                if (armv4t_ld_32(cpu->mmu, pc, &inst) != 0) {
+                if (unlikely(armv4t_ld_32(cpu->mmu, pc, &inst) != 0)) {
                     take_exception(cpu, MODE_ABT, VEC_PABT, lr);
                 } else {
                     arm_exec(cpu, inst, pc);
