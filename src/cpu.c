@@ -24,9 +24,6 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
     armv4t_set_flag(cpu, FLAG_IRQ, true);
     if (mode == MODE_FIQ) {
         armv4t_set_flag(cpu, FLAG_FIQ, true);
-    } else if (mode != MODE_IRQ) {
-        // Don't treat FIQ or IRQ as exceptions
-        cpu->_internal.exception = true;
     }
 
     cpu->regs[REG_LR] = lr;
@@ -90,50 +87,46 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
 }
 
 uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
-    // Clear any branches made outside of the run loop
-    cpu->_internal.branch = false;
-
+    bool thumb = armv4t_get_flag(cpu, FLAG_THUMB);
     uint32_t pc = cpu->regs[REG_PC];
     for (uint64_t i = 0; i < steps; i++) {
-        uint32_t lr = pc + 4;
-        if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
-            if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
-                take_exception(cpu, MODE_FIQ, VEC_FIQ, lr);
-            }
-            if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
-                take_exception(cpu, MODE_IRQ, VEC_IRQ, lr);
-            }
-        }
-
-        if (likely(!cpu->_internal.branch)) {
-            if (armv4t_get_flag(cpu, FLAG_THUMB)) {
-                uint16_t inst;
-                if (likely(armv4t_ld_16(cpu->mmu, pc, &inst) == 0)) {
-                    thumb_exec(cpu, inst, pc);
-                    pc += 2;
-                } else {
-                    take_exception(cpu, MODE_ABT, VEC_PABT, lr);
-                }
+        uint32_t state = 0;
+        if (thumb) {
+            uint16_t inst;
+            if (likely(armv4t_ld_16(cpu->mmu, pc, &inst) == 0)) {
+                state = thumb_exec(cpu, inst, pc);
+                pc += 2;
             } else {
-                uint32_t inst;
-                if (likely(armv4t_ld_32(cpu->mmu, pc, &inst) == 0)) {
-                    arm_exec(cpu, inst, pc);
-                    pc += 4;
-                } else {
-                    take_exception(cpu, MODE_ABT, VEC_PABT, lr);
-                }
+                take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
+                state = STATE_BRANCH | STATE_EXCEPTION;
+            }
+        } else {
+            uint32_t inst;
+            if (likely(armv4t_ld_32(cpu->mmu, pc, &inst) == 0)) {
+                state = arm_exec(cpu, inst, pc);
+                pc += 4;
+            } else {
+                take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
+                state = STATE_BRANCH | STATE_EXCEPTION;
             }
         }
 
-        if (unlikely(cpu->_internal.branch)) {
-            if (unlikely(cpu->_internal.exception)) {
-                cpu->_internal.exception = false;
+        if (unlikely((state & STATE_BRANCH) != 0)) {
+            if (unlikely((state & STATE_EXCEPTION) != 0)) {
                 if (halt_on_exception) {
                     return i;
                 }
+            } else if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
+                // Lazily handle interrupts on branch
+                if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
+                    take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
+                } else if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
+                    take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
+                }
             }
 
-            cpu->_internal.branch = false;
+            // Thumb only changes on branch
+            thumb = armv4t_get_flag(cpu, FLAG_THUMB);
             pc = cpu->regs[REG_PC];
         }
     }
@@ -150,9 +143,7 @@ void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr) {
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc) {
     cpu->cp15[5] = fsr;
     cpu->cp15[6] = fsa;
-
-    uint32_t lr = pc + 8;
-    take_exception(cpu, MODE_ABT, VEC_DABT, lr);
+    take_exception(cpu, MODE_ABT, VEC_DABT, pc + 8);
 }
 
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc) {

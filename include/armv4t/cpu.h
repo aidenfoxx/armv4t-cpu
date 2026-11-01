@@ -38,8 +38,6 @@ typedef struct {
     struct armv4t_mmu *mmu;
     /* private */
     struct {
-        bool branch;
-        bool exception;
         bool fiq_line;
         bool irq_line;
         struct {
@@ -96,7 +94,6 @@ static inline void armv4t_set_flag(armv4t_cpu *cpu, armv4t_flag flag, bool value
 
 static inline void armv4t_branch(armv4t_cpu *cpu, uint32_t addr) {
     cpu->regs[REG_PC] = armv4t_get_flag(cpu, FLAG_THUMB) ? addr & ~1 : addr & ~3;
-    cpu->_internal.branch = true;
 }
 
 static inline void armv4t_bx(armv4t_cpu *cpu, uint32_t addr) {

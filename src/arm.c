@@ -270,7 +270,7 @@ static void branch_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     armv4t_branch(cpu, pc + 8 + offset_s);
 }
 
-static void data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     uint32_t opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     uint32_t rn = get_bits(inst, 16, 4);
@@ -299,15 +299,20 @@ static void data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
-    } else if (s) {
+        return STATE_BRANCH;
+    }
+
+    if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
         armv4t_set_flag(cpu, FLAG_Z, result == 0);
         armv4t_set_flag(cpu, FLAG_C, carry);
         armv4t_set_flag(cpu, FLAG_V, overflow);
     }
+
+    return 0;
 }
 
-static void data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     uint32_t opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     uint32_t rn = get_bits(inst, 16, 4);
@@ -336,15 +341,20 @@ static void data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
-    } else if (s) {
+        return STATE_BRANCH;
+    }
+
+    if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
         armv4t_set_flag(cpu, FLAG_Z, result == 0);
         armv4t_set_flag(cpu, FLAG_C, carry);
         armv4t_set_flag(cpu, FLAG_V, overflow);
     }
+
+    return 0;
 }
 
-static void data_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state data_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     uint32_t opcode = get_bits(inst, 21, 4);
     bool s = get_bit(inst, 20);
     uint32_t rn = get_bits(inst, 16, 4);
@@ -368,12 +378,17 @@ static void data_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
-    } else if (s) {
+        return STATE_BRANCH;
+    }
+
+    if (s) {
         armv4t_set_flag(cpu, FLAG_N, get_bit(result, 31));
         armv4t_set_flag(cpu, FLAG_Z, result == 0);
         armv4t_set_flag(cpu, FLAG_C, carry);
         armv4t_set_flag(cpu, FLAG_V, overflow);
     }
+
+    return 0;
 }
 
 static void mrs_inst(armv4t_cpu *cpu, uint32_t inst) {
@@ -475,7 +490,7 @@ static void mul_long_inst(armv4t_cpu *cpu, uint32_t inst) {
     }
 }
 
-static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool b = get_bit(inst, 22);
@@ -514,8 +529,10 @@ static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
     }
 
+    exec_state state = 0;
     if (l && rd == REG_PC) {
         armv4t_branch(cpu, cpu->regs[REG_PC]);
+        state = STATE_BRANCH;
     }
 
 #ifdef ARMV4T_ARM7
@@ -528,10 +545,13 @@ static void single_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, addr, pc);
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
+
+    return state;
 }
 
-static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool b = get_bit(inst, 22);
@@ -563,8 +583,10 @@ static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         }
     }
 
+    exec_state state = 0;
     if (l && rd == REG_PC) {
         armv4t_branch(cpu, cpu->regs[REG_PC]);
+        state = STATE_BRANCH;
     }
 
 #ifdef ARMV4T_ARM7
@@ -577,10 +599,13 @@ static void single_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, addr, pc);
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
+
+    return state;
 }
 
-static void halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool w = get_bit(inst, 21);
@@ -635,10 +660,13 @@ static void halfword_xfer_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, addr, pc);
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
+
+    return 0;
 }
 
-static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool w = get_bit(inst, 21);
@@ -691,10 +719,13 @@ static void halfword_xfer_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) 
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, addr, pc);
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
+
+    return 0;
 }
 
-static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool p = get_bit(inst, 24);
     bool u = get_bit(inst, 23);
     bool s = get_bit(inst, 22);
@@ -761,16 +792,22 @@ static void block_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, fsa, pc);
-    } else if (l && rlist_pc) {
+        return STATE_BRANCH | STATE_EXCEPTION;
+    }
+
+    if (l && rlist_pc) {
         if (s) {
             restore_spsr(cpu);
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
+        return STATE_BRANCH;
     }
+
+    return 0;
 }
 
-static void swap_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state swap_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool b = get_bit(inst, 22);
     uint32_t rn = get_bits(inst, 16, 4);
     uint32_t rd = get_bits(inst, 12, 4);
@@ -794,17 +831,19 @@ static void swap_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (fsr != 0) {
         take_data_abort_exception(cpu, fsr, addr, pc);
-        return;
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
 
     cpu->regs[rd] = result;
+    return 0;
 }
 
-static void swi_inst(armv4t_cpu *cpu, uint32_t pc) {
+static exec_state swi_inst(armv4t_cpu *cpu, uint32_t pc) {
     take_swi_exception(cpu, pc + 4);
+    return STATE_BRANCH | STATE_EXCEPTION;
 }
 
-static void cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+static exec_state cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     bool l = get_bit(inst, 20);
     uint32_t crn = get_bits(inst, 16, 4);
     uint32_t rd = get_bits(inst, 12, 4);
@@ -812,7 +851,7 @@ static void cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (cp_num != 15) {
         take_undefined_exception(cpu, pc + 4);
-        return;
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
 
     if (l) { // Load
@@ -824,12 +863,14 @@ static void cp_reg_xfer_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     } else { // Store
         cpu->cp15[crn] = reg_pc12(cpu, rd, pc);
     }
+
+    return 0;
 }
 
-void arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
+exec_state arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     uint32_t cond = get_bits(inst, 28, 4);
     if (!has_cond(cpu, cond)) {
-        return;
+        return 0;
     }
 
     // Sorted to favor high frequency instructions where possible. Rare
@@ -842,39 +883,44 @@ void arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
         } else if (unlikely((inst & MRS_MASK) == MRS_VALUE)) {
             mrs_inst(cpu, inst);
         } else {
-            data_shift_imm_inst(cpu, inst, pc);
+            return data_shift_imm_inst(cpu, inst, pc);
         }
     } else if ((inst & DATA_IMM_MASK) == DATA_IMM_VALUE) {
         if (unlikely((inst & MSR_IMM_MASK) == MSR_IMM_VALUE)) {
             msr_imm_inst(cpu, inst);
         } else {
-            data_imm_inst(cpu, inst, pc);
+            return data_imm_inst(cpu, inst, pc);
         }
     } else if ((inst & BRANCH_MASK) == BRANCH_VALUE) {
         branch_inst(cpu, inst, pc);
+        return STATE_BRANCH;
     } else if ((inst & BRANCH_EX_MASK) == BRANCH_EX_VALUE) {
         branch_ex_inst(cpu, inst);
+        return STATE_BRANCH;
     } else if ((inst & BLOCK_XFER_MASK) == BLOCK_XFER_VALUE) {
-        block_xfer_inst(cpu, inst, pc);
+        return block_xfer_inst(cpu, inst, pc);
     } else if ((inst & MUL_MASK) == MUL_VALUE) {
         mul_inst(cpu, inst);
     } else if ((inst & MUL_LONG_MASK) == MUL_LONG_VALUE) {
         mul_long_inst(cpu, inst);
     } else if ((inst & SWAP_MASK) == SWAP_VALUE) {
-        swap_inst(cpu, inst, pc);
+        return swap_inst(cpu, inst, pc);
     } else if ((inst & SINGLE_XFER_REG_MASK) == SINGLE_XFER_REG_VALUE) {
-        single_xfer_reg_inst(cpu, inst, pc);
+        return single_xfer_reg_inst(cpu, inst, pc);
     } else if ((inst & DATA_SHIFT_REG_MASK) == DATA_SHIFT_REG_VALUE) {
-        data_shift_reg_inst(cpu, inst, pc);
+        return data_shift_reg_inst(cpu, inst, pc);
     } else if ((inst & HALFWORD_XFER_IMM_MASK) == HALFWORD_XFER_IMM_VALUE) {
-        halfword_xfer_imm_inst(cpu, inst, pc);
+        return halfword_xfer_imm_inst(cpu, inst, pc);
     } else if ((inst & HALFWORD_XFER_REG_MASK) == HALFWORD_XFER_REG_VALUE) {
-        halfword_xfer_reg_inst(cpu, inst, pc);
+        return halfword_xfer_reg_inst(cpu, inst, pc);
     } else if ((inst & CP_REG_XFER_MASK) == CP_REG_XFER_VALUE) {
-        cp_reg_xfer_inst(cpu, inst, pc);
+        return cp_reg_xfer_inst(cpu, inst, pc);
     } else if ((inst & SWI_MASK) == SWI_VALUE) {
-        swi_inst(cpu, pc);
+        return swi_inst(cpu, pc);
     } else {
         take_undefined_exception(cpu, pc + 4);
+        return STATE_BRANCH | STATE_EXCEPTION;
     }
+
+    return 0;
 }

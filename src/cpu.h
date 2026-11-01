@@ -7,6 +7,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef uint32_t exec_state;
+
+enum {
+    STATE_BRANCH = 1,
+    STATE_EXCEPTION = 1 << 1,
+};
+
 enum {
     COND_EQ = 0,
     COND_NE,
@@ -25,8 +32,8 @@ enum {
     COND_AL
 };
 
-void arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc);
-void thumb_exec(armv4t_cpu *cpu, uint16_t inst, uint32_t pc);
+exec_state arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc);
+exec_state thumb_exec(armv4t_cpu *cpu, uint16_t inst, uint32_t pc);
 
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc);
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);
