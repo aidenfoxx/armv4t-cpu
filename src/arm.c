@@ -876,7 +876,7 @@ exec_state arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
     // Sorted to favor high frequency instructions where possible. Rare
     // instructions that share a more common encoding are matched within it
     if ((inst & SINGLE_XFER_IMM_MASK) == SINGLE_XFER_IMM_VALUE) {
-        single_xfer_imm_inst(cpu, inst, pc);
+        return single_xfer_imm_inst(cpu, inst, pc);
     } else if ((inst & DATA_SHIFT_IMM_MASK) == DATA_SHIFT_IMM_VALUE) {
         if (unlikely((inst & MSR_REG_MASK) == MSR_REG_VALUE)) {
             msr_reg_inst(cpu, inst);
