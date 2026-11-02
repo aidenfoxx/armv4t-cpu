@@ -32,8 +32,8 @@ enum {
     COND_AL
 };
 
-exec_state arm_exec(armv4t_cpu *cpu, uint32_t inst, uint32_t pc);
-exec_state thumb_exec(armv4t_cpu *cpu, uint16_t inst, uint32_t pc);
+exec_state arm_exec(armv4t_cpu *cpu, armv4t_mmu *mmu, uint32_t inst, uint32_t pc);
+exec_state thumb_exec(armv4t_cpu *cpu, armv4t_mmu *mmu, uint16_t inst, uint32_t pc);
 
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc);
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);

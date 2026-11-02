@@ -1,6 +1,8 @@
 #ifndef ARMV4T_CPU_H
 #define ARMV4T_CPU_H
 
+#include "armv4t/mmu.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -35,7 +37,6 @@ typedef struct {
     uint32_t regs[16];
     uint32_t cp15[16];
     armv4t_psr cpsr;
-    struct armv4t_mmu *mmu;
     /* private */
     struct {
         bool fiq_line;
@@ -62,10 +63,10 @@ typedef struct {
 /*
  * Public API.
  */
-void armv4t_cpu_init(armv4t_cpu *cpu, struct armv4t_mmu *mmu);
+void armv4t_cpu_init(armv4t_cpu *cpu);
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
-uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception);
+uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_on_exception);
 
 void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr);
 

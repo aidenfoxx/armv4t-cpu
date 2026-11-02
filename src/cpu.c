@@ -72,10 +72,9 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
     }
 }
 
-void armv4t_cpu_init(armv4t_cpu *cpu, struct armv4t_mmu *mmu) {
+void armv4t_cpu_init(armv4t_cpu *cpu) {
     memset(cpu, 0, sizeof(armv4t_cpu));
     cpu->cpsr = MODE_SYS;
-    cpu->mmu = mmu;
 }
 
 void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
@@ -86,15 +85,16 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
+uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps,
+                    bool halt_on_exception) {
     bool thumb = armv4t_get_flag(cpu, FLAG_THUMB);
     uint32_t pc = cpu->regs[REG_PC];
     for (uint64_t i = 0; i < steps; i++) {
         uint32_t state = 0;
         if (thumb) {
             uint16_t inst;
-            if (likely(armv4t_ld_16(cpu->mmu, pc, &inst) == 0)) {
-                state = thumb_exec(cpu, inst, pc);
+            if (likely(armv4t_ld_16(mmu, pc, &inst) == 0)) {
+                state = thumb_exec(cpu, mmu, inst, pc);
                 pc += 2;
             } else {
                 take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
@@ -102,8 +102,8 @@ uint64_t armv4t_run(armv4t_cpu *cpu, uint64_t steps, bool halt_on_exception) {
             }
         } else {
             uint32_t inst;
-            if (likely(armv4t_ld_32(cpu->mmu, pc, &inst) == 0)) {
-                state = arm_exec(cpu, inst, pc);
+            if (likely(armv4t_ld_32(mmu, pc, &inst) == 0)) {
+                state = arm_exec(cpu, mmu, inst, pc);
                 pc += 4;
             } else {
                 take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
