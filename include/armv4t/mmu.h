@@ -8,6 +8,8 @@
 #define FSR_FAULT(fsr) ((fsr) & 0xF)
 #define FSR_DOMAIN(fsr) (((fsr) >> 4) & 0xF)
 
+#define ARMV4T_REQUEST_PAGE_SIZE 0x1000
+
 typedef enum {
     FAULT_ALIGN_0 = 0x01,
     FAULT_ALIGN_1 = 0x03,
@@ -22,6 +24,12 @@ typedef enum {
 typedef uint32_t armv4t_fsr;
 
 typedef struct armv4t_mmu armv4t_mmu;
+
+/**
+ * Pages are used as a fast cache during instruction fetching. Return NULL
+ * to disable page caching.
+ */
+void *armv4t_request_page(armv4t_mmu *mmu, uint32_t addr);
 
 armv4t_fsr armv4t_ld_8(armv4t_mmu *mmu, uint32_t addr, uint8_t *value);
 armv4t_fsr armv4t_ld_16(armv4t_mmu *mmu, uint32_t addr, uint16_t *value);

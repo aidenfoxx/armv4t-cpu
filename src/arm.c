@@ -208,19 +208,23 @@ static uint32_t expand_imm(uint32_t imm12, bool carry_in) {
 FORCE_INLINE
 static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool *carry_out,
                         bool *overflow) {
-    switch (op) {
-    case OP_AND:
-    case OP_TST:
+    // Prioritize high frequency ops
+    if (op == OP_MOV) {
+        return b;
+    } else if (op == OP_ADD) {
+        return add_with_carry(a, b, false, carry_out, overflow);
+    } else if (op == OP_SUB || op == OP_CMP) {
+        return add_with_carry(a, ~b, true, carry_out, overflow);
+    } else if (op == OP_AND || op == OP_TST) {
         return a & b;
+    }
+
+    switch (op) {
     case OP_EOR:
     case OP_TEQ:
         return a ^ b;
-    case OP_SUB:
-    case OP_CMP:
-        return add_with_carry(a, ~b, true, carry_out, overflow);
     case OP_RSB:
         return add_with_carry(~a, b, true, carry_out, overflow);
-    case OP_ADD:
     case OP_CMN:
         return add_with_carry(a, b, false, carry_out, overflow);
     case OP_ADC:
@@ -231,8 +235,6 @@ static uint32_t data_op(uint32_t op, uint32_t a, uint32_t b, bool carry_in, bool
         return add_with_carry(~a, b, carry_in, carry_out, overflow);
     case OP_ORR:
         return a | b;
-    case OP_MOV:
-        return b;
     case OP_BIC:
         return a & ~b;
     case OP_MVN:

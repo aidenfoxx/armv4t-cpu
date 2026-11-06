@@ -34,6 +34,10 @@
 #define unreachable() (unreachable_impl())
 #endif
 
+static inline uint32_t align_down(uint32_t value, uint32_t alignment) {
+    return value & ~(alignment - 1);
+}
+
 static inline bool get_bit(uint32_t value, uint32_t offset) {
     return (value >> offset) & 1;
 }

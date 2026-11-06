@@ -1,10 +1,12 @@
-#include "cpu.h"
 #include "armv4t/cpu.h"
 #include "armv4t/mmu.h"
+#include "cpu.h"
 #include "utils.h"
 
 #include <stdint.h>
 #include <string.h>
+
+#define NO_INST 0
 
 enum {
     VEC_UND = 0x04,
@@ -28,6 +30,16 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
 
     cpu->regs[REG_LR] = lr;
     armv4t_branch(cpu, vector);
+}
+
+static void take_interrupt(armv4t_cpu *cpu) {
+    if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
+        if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
+            take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
+        } else if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
+            take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
+        }
+    }
 }
 
 static uint32_t *get_sp_lr_bank(armv4t_cpu *cpu, armv4t_mode mode) {
@@ -72,6 +84,86 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
     }
 }
 
+FORCE_INLINE
+static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_state *state,
+                         bool thumb) {
+    uint32_t size = thumb ? 2 : 4;
+    uint32_t pc = align_down(cpu->regs[REG_PC], size);
+
+    uint8_t *page;
+    uint32_t page_addr = 1; // Unaligned value to force a page update
+
+    uint32_t next_inst = NO_INST;
+    for (uint64_t i = 0; i < steps; i++) {
+        uint32_t inst = next_inst;
+        if (unlikely(inst == NO_INST)) {
+            uint32_t next_addr = align_down(pc, ARMV4T_REQUEST_PAGE_SIZE);
+            if (unlikely(next_addr != page_addr)) {
+                page_addr = next_addr;
+                page = armv4t_request_page(mmu, page_addr);
+            }
+
+            if (page == NULL) {
+                armv4t_fsr fsr = 0;
+                if (thumb) {
+                    uint16_t value;
+                    fsr = armv4t_ld_16(mmu, pc, &value);
+                    inst = value;
+                } else {
+                    fsr = armv4t_ld_32(mmu, pc, &inst);
+                }
+
+                if (unlikely(fsr != 0)) {
+                    take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
+                    *state = STATE_BRANCH | STATE_EXCEPTION;
+                    return i;
+                }
+            } else {
+                memcpy(&inst, page + pc % ARMV4T_REQUEST_PAGE_SIZE, size);
+            }
+        }
+
+        uint32_t next_pc = pc + size;
+        if (unlikely((next_pc % ARMV4T_REQUEST_PAGE_SIZE) == 0)) {
+            next_inst = NO_INST;
+        } else if (page != NULL) {
+            // Pre-fetch next instruction
+            memcpy(&next_inst, page + next_pc % ARMV4T_REQUEST_PAGE_SIZE, size);
+        }
+
+        exec_state new_state;
+        if (thumb) {
+            new_state = thumb_exec(cpu, mmu, (uint16_t)inst, pc);
+        } else {
+            new_state = arm_exec(cpu, mmu, inst, pc);
+        }
+
+        if (unlikely((new_state & STATE_BRANCH) != 0)) {
+            if (unlikely((new_state & STATE_EXCEPTION) != 0)) {
+                *state = new_state;
+                return i;
+            }
+
+            // Lazily take interrupts on branch
+            take_interrupt(cpu);
+
+            // Return to main loop on state change
+            if (unlikely(armv4t_get_flag(cpu, FLAG_THUMB) != thumb)) {
+                *state = new_state;
+                return i;
+            }
+
+            next_inst = NO_INST;
+            pc = cpu->regs[REG_PC];
+        } else {
+            pc = next_pc;
+        }
+    }
+
+    cpu->regs[REG_PC] = pc;
+    return steps;
+}
+
 void armv4t_cpu_init(armv4t_cpu *cpu) {
     memset(cpu, 0, sizeof(armv4t_cpu));
     cpu->cpsr = MODE_SYS;
@@ -85,53 +177,20 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
     }
 }
 
-uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps,
-                    bool halt_on_exception) {
-    bool thumb = armv4t_get_flag(cpu, FLAG_THUMB);
-    uint32_t pc = cpu->regs[REG_PC];
+uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_on_exception) {
     for (uint64_t i = 0; i < steps; i++) {
-        uint32_t state = 0;
-        if (thumb) {
-            uint16_t inst;
-            if (likely(armv4t_ld_16(mmu, pc, &inst) == 0)) {
-                state = thumb_exec(cpu, mmu, inst, pc);
-                pc += 2;
-            } else {
-                take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
-                state = STATE_BRANCH | STATE_EXCEPTION;
-            }
+        exec_state state = 0;
+        if (armv4t_get_flag(cpu, FLAG_THUMB)) {
+            i += run_mode(cpu, mmu, steps - i, &state, true);
         } else {
-            uint32_t inst;
-            if (likely(armv4t_ld_32(mmu, pc, &inst) == 0)) {
-                state = arm_exec(cpu, mmu, inst, pc);
-                pc += 4;
-            } else {
-                take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
-                state = STATE_BRANCH | STATE_EXCEPTION;
-            }
+            i += run_mode(cpu, mmu, steps - i, &state, false);
         }
 
-        if (unlikely((state & STATE_BRANCH) != 0)) {
-            if (unlikely((state & STATE_EXCEPTION) != 0)) {
-                if (halt_on_exception) {
-                    return i;
-                }
-            } else if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
-                // Lazily handle interrupts on branch
-                if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
-                    take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
-                } else if (cpu->_internal.irq_line && !armv4t_get_flag(cpu, FLAG_IRQ)) {
-                    take_exception(cpu, MODE_IRQ, VEC_IRQ, cpu->regs[REG_PC] + 4);
-                }
-            }
-
-            // Thumb only changes on branch
-            thumb = armv4t_get_flag(cpu, FLAG_THUMB);
-            pc = cpu->regs[REG_PC];
+        if (halt_on_exception && unlikely((state & STATE_EXCEPTION) != 0)) {
+            return i;
         }
     }
 
-    cpu->regs[REG_PC] = pc;
     return steps;
 }
 
