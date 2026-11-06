@@ -85,53 +85,73 @@ static void switch_mode_banks(armv4t_cpu *cpu, armv4t_mode from, armv4t_mode to)
 }
 
 FORCE_INLINE
+static uint32_t read_page_inst(const uint8_t *page, uint32_t addr, bool thumb) {
+    uint32_t offset = addr % ARMV4T_REQUEST_PAGE_SIZE;
+    if (thumb) {
+        uint16_t inst;
+        memcpy(&inst, page + offset, 2);
+        return inst;
+    } else {
+        uint32_t inst;
+        memcpy(&inst, page + offset, 4);
+        return inst;
+    }
+}
+
+FORCE_INLINE
+static armv4t_fsr load_inst(armv4t_mmu *mmu, uint32_t addr, uint32_t *inst, bool thumb) {
+    if (thumb) {
+        uint16_t value;
+        armv4t_fsr fsr = armv4t_ld_16(mmu, addr, &value);
+        *inst = value;
+        return fsr;
+    } else {
+        return armv4t_ld_32(mmu, addr, inst);
+    }
+}
+
+FORCE_INLINE
 static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_state *state,
                          bool thumb) {
     uint32_t size = thumb ? 2 : 4;
     uint32_t pc = align_down(cpu->regs[REG_PC], size);
 
     uint8_t *page;
-    uint32_t page_addr = 1; // Unaligned value to force a page update
-
+    uint32_t page_addr = 1; // Misaligned to force a page update
     uint32_t next_inst = NO_INST;
+
     for (uint64_t i = 0; i < steps; i++) {
         uint32_t inst = next_inst;
+        uint32_t next_pc = pc + size;
+
         if (unlikely(inst == NO_INST)) {
-            uint32_t next_addr = align_down(pc, ARMV4T_REQUEST_PAGE_SIZE);
-            if (unlikely(next_addr != page_addr)) {
-                page_addr = next_addr;
-                page = armv4t_request_page(mmu, page_addr);
+            uint32_t addr = align_down(pc, ARMV4T_REQUEST_PAGE_SIZE);
+            if (unlikely(addr != page_addr)) {
+                page = armv4t_request_page(mmu, addr);
+                page_addr = addr;
             }
 
             if (page == NULL) {
-                armv4t_fsr fsr = 0;
-                if (thumb) {
-                    uint16_t value;
-                    fsr = armv4t_ld_16(mmu, pc, &value);
-                    inst = value;
-                } else {
-                    fsr = armv4t_ld_32(mmu, pc, &inst);
-                }
-
-                if (unlikely(fsr != 0)) {
-                    take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
+                if (unlikely(load_inst(mmu, pc, &inst, thumb) != 0)) {
+                    take_prefetch_abort_exception(cpu, pc);
                     *state = STATE_BRANCH | STATE_EXCEPTION;
                     return i;
                 }
-            } else {
-                memcpy(&inst, page + pc % ARMV4T_REQUEST_PAGE_SIZE, size);
+
+                goto execute;
             }
+
+            inst = read_page_inst(page, pc, thumb);
         }
 
-        uint32_t next_pc = pc + size;
         if (unlikely((next_pc % ARMV4T_REQUEST_PAGE_SIZE) == 0)) {
             next_inst = NO_INST;
-        } else if (page != NULL) {
-            // Pre-fetch next instruction
-            memcpy(&next_inst, page + next_pc % ARMV4T_REQUEST_PAGE_SIZE, size);
+        } else {
+            next_inst = read_page_inst(page, next_pc, thumb);
         }
 
         exec_state new_state;
+    execute:
         if (thumb) {
             new_state = thumb_exec(cpu, mmu, (uint16_t)inst, pc);
         } else {
@@ -144,10 +164,9 @@ static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_
                 return i;
             }
 
-            // Lazily take interrupts on branch
+            // Lazily handle interrupts on branch
             take_interrupt(cpu);
 
-            // Return to main loop on state change
             if (unlikely(armv4t_get_flag(cpu, FLAG_THUMB) != thumb)) {
                 *state = new_state;
                 return i;
@@ -197,6 +216,10 @@ uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_
 void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr) {
     restore_spsr(cpu);
     armv4t_branch(cpu, addr);
+}
+
+void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc) {
+    take_exception(cpu, MODE_ABT, VEC_PABT, pc + 4);
 }
 
 void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, uint32_t pc) {
