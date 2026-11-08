@@ -3,12 +3,12 @@
 
 #include <stdint.h>
 
+#define ARMV4T_REQUEST_PAGE_SIZE 0x1000
+
 #define MAKE_FSR(fault, domain) (((fault) & 0xF) | (((domain) & 0xF) << 4))
 
 #define FSR_FAULT(fsr) ((fsr) & 0xF)
 #define FSR_DOMAIN(fsr) (((fsr) >> 4) & 0xF)
-
-#define ARMV4T_REQUEST_PAGE_SIZE 0x1000
 
 typedef enum {
     FAULT_ALIGN_0 = 0x01,
@@ -27,7 +27,7 @@ typedef struct armv4t_mmu armv4t_mmu;
 
 /**
  * Pages are used as a fast cache during instruction fetching. Return NULL
- * to disable page caching.
+ * to ignore page caching.
  */
 void *armv4t_request_page(armv4t_mmu *mmu, uint32_t addr);
 

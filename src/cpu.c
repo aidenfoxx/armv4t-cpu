@@ -111,7 +111,7 @@ static armv4t_fsr load_inst(armv4t_mmu *mmu, uint32_t addr, uint32_t *inst, bool
 }
 
 FORCE_INLINE
-static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_state *state,
+static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool *exception,
                          bool thumb) {
     uint32_t size = thumb ? 2 : 4;
     uint32_t pc = align_down(cpu->regs[REG_PC], size);
@@ -131,27 +131,24 @@ static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_
                 page_addr = addr;
             }
 
-            if (page == NULL) {
-                if (unlikely(load_inst(mmu, pc, &inst, thumb) != 0)) {
-                    take_prefetch_abort_exception(cpu, pc);
-                    *state = STATE_BRANCH | STATE_EXCEPTION;
-                    return i;
-                }
-
-                goto execute;
+            if (page != NULL) {
+                inst = read_page_inst(page, pc, thumb);
+                goto prefetch;
+            } else if (unlikely(load_inst(mmu, pc, &inst, thumb) != 0)) {
+                take_prefetch_abort_exception(cpu, pc);
+                *exception = true;
+                return i;
             }
-
-            inst = read_page_inst(page, pc, thumb);
-        }
-
-        if (unlikely((next_pc % ARMV4T_REQUEST_PAGE_SIZE) == 0)) {
-            next_inst = NO_INST;
         } else {
-            next_inst = read_page_inst(page, next_pc, thumb);
+        prefetch:
+            if (unlikely((next_pc % ARMV4T_REQUEST_PAGE_SIZE) == 0)) {
+                next_inst = NO_INST;
+            } else {
+                next_inst = read_page_inst(page, next_pc, thumb);
+            }
         }
 
         exec_state new_state;
-    execute:
         if (thumb) {
             new_state = thumb_exec(cpu, mmu, (uint16_t)inst, pc);
         } else {
@@ -160,7 +157,7 @@ static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_
 
         if (unlikely((new_state & STATE_BRANCH) != 0)) {
             if (unlikely((new_state & STATE_EXCEPTION) != 0)) {
-                *state = new_state;
+                *exception = true;
                 return i;
             }
 
@@ -168,12 +165,11 @@ static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, exec_
             take_interrupt(cpu);
 
             if (unlikely(armv4t_get_flag(cpu, FLAG_THUMB) != thumb)) {
-                *state = new_state;
                 return i;
             }
 
-            next_inst = NO_INST;
             pc = cpu->regs[REG_PC];
+            next_inst = NO_INST;
         } else {
             pc = next_pc;
         }
@@ -198,14 +194,14 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode) {
 
 uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_on_exception) {
     for (uint64_t i = 0; i < steps; i++) {
-        exec_state state = 0;
+        bool exception = false;
         if (armv4t_get_flag(cpu, FLAG_THUMB)) {
-            i += run_mode(cpu, mmu, steps - i, &state, true);
+            i += run_mode(cpu, mmu, steps - i, &exception, true);
         } else {
-            i += run_mode(cpu, mmu, steps - i, &state, false);
+            i += run_mode(cpu, mmu, steps - i, &exception, false);
         }
 
-        if (halt_on_exception && unlikely((state & STATE_EXCEPTION) != 0)) {
+        if (halt_on_exception && unlikely(exception)) {
             return i;
         }
     }
