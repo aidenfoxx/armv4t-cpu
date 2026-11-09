@@ -209,9 +209,12 @@ uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_
     return steps;
 }
 
-void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr) {
-    restore_spsr(cpu);
-    armv4t_branch(cpu, addr);
+void armv4t_restore_spsr(armv4t_cpu *cpu) {
+    armv4t_psr spsr = get_spsr(cpu);
+    if (spsr != 0) {
+        switch_mode_banks(cpu, armv4t_get_mode(cpu), spsr & 0x1F);
+        cpu->cpsr = spsr;
+    }
 }
 
 void take_prefetch_abort_exception(armv4t_cpu *cpu, uint32_t pc) {
@@ -230,12 +233,4 @@ void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc) {
 
 void take_swi_exception(armv4t_cpu *cpu, uint32_t next_pc) {
     take_exception(cpu, MODE_SVC, VEC_SWI, next_pc);
-}
-
-void restore_spsr(armv4t_cpu *cpu) {
-    armv4t_psr spsr = get_spsr(cpu);
-    if (spsr != 0) {
-        switch_mode_banks(cpu, armv4t_get_mode(cpu), spsr & 0x1F);
-        cpu->cpsr = spsr;
-    }
 }

@@ -40,8 +40,6 @@ void take_data_abort_exception(armv4t_cpu *cpu, armv4t_fsr fsr, uint32_t fsa, ui
 void take_undefined_exception(armv4t_cpu *cpu, uint32_t next_pc);
 void take_swi_exception(armv4t_cpu *cpu, uint32_t next_pc);
 
-void restore_spsr(armv4t_cpu *cpu);
-
 /**
  * Inline helpers.
  */

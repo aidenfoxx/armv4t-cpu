@@ -292,7 +292,7 @@ static exec_state data_shift_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t p
 
     if (rd == REG_PC) {
         if (s) {
-            restore_spsr(cpu);
+            armv4t_restore_spsr(cpu);
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
@@ -334,7 +334,7 @@ static exec_state data_shift_reg_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t p
 
     if (rd == REG_PC) {
         if (s) {
-            restore_spsr(cpu);
+            armv4t_restore_spsr(cpu);
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
@@ -371,7 +371,7 @@ static exec_state data_imm_inst(armv4t_cpu *cpu, uint32_t inst, uint32_t pc) {
 
     if (rd == REG_PC) {
         if (s) {
-            restore_spsr(cpu);
+            armv4t_restore_spsr(cpu);
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);
@@ -798,7 +798,7 @@ static exec_state block_xfer_inst(armv4t_cpu *cpu, armv4t_mmu *mmu, uint32_t ins
 
     if (l && rlist_pc) {
         if (s) {
-            restore_spsr(cpu);
+            armv4t_restore_spsr(cpu);
         }
 
         armv4t_branch(cpu, cpu->regs[REG_PC]);

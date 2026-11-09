@@ -68,7 +68,7 @@ void armv4t_set_mode(armv4t_cpu *cpu, armv4t_mode mode);
 
 uint64_t armv4t_run(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool halt_on_exception);
 
-void armv4t_exception_return(armv4t_cpu *cpu, uint32_t addr);
+void armv4t_restore_spsr(armv4t_cpu *cpu);
 
 /*
  * Inline helpers.
