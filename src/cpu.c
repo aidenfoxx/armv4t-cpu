@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include <string.h>
 
+// This technically collides with a real ARM instruction, but produces
+// faster output for older ARM64 targets. The only consequence is that 0x0
+// instructions don't trigger pre-fetching
 #define NO_INST 0
 
 enum {
@@ -32,7 +35,7 @@ static void take_exception(armv4t_cpu *cpu, armv4t_mode mode, uint32_t vector, u
     armv4t_branch(cpu, vector);
 }
 
-static void take_interrupt(armv4t_cpu *cpu) {
+static void poll_interrupts(armv4t_cpu *cpu) {
     if (unlikely(cpu->_internal.fiq_line | cpu->_internal.irq_line)) {
         if (cpu->_internal.fiq_line && !armv4t_get_flag(cpu, FLAG_FIQ)) {
             take_exception(cpu, MODE_FIQ, VEC_FIQ, cpu->regs[REG_PC] + 4);
@@ -162,7 +165,7 @@ static uint64_t run_mode(armv4t_cpu *cpu, armv4t_mmu *mmu, uint64_t steps, bool 
             }
 
             // Lazily handle interrupts on branch
-            take_interrupt(cpu);
+            poll_interrupts(cpu);
 
             if (unlikely(armv4t_get_flag(cpu, FLAG_THUMB) != thumb)) {
                 return i;
